@@ -115,7 +115,7 @@ public class Itemset implements ItemContainer {
 
                         // Item label and value
                         sb.append('"');
-                        sb.append(item.getExternalJSLabel());
+                        sb.append(item.getExternalJSLabel(context, locationData));
                         sb.append("\",\"");
                         sb.append(item.getExternalJSValue(context));
                         sb.append('\"');
@@ -194,7 +194,7 @@ public class Itemset implements ItemContainer {
      * @param isMultiple    whether multiple selection is allowed (to determine selected item)
      * @return              XML document
      */
-    public DocumentInfo getXMLTreeInfo(Configuration configuration, final String controlValue, final boolean isMultiple, LocationData locationData) {
+    public DocumentInfo getXMLTreeInfo(Configuration configuration, final String controlValue, final boolean isMultiple, final LocationData locationData) {
         // Produce a JSON fragment with hierarchical information
 
         final TinyBuilder treeBuilder = new TinyBuilder();
@@ -254,17 +254,13 @@ public class Itemset implements ItemContainer {
                         ch.startElement("item", itemAttributes);
                         {
                             // Label and value
-                            final String itemLabel = (item.getLabel() != null) ? item.getLabel() : "";
-                            {
-                                ch.startElement("label");
-                                ch.text(itemLabel);
-                                ch.endElement();
-                            }
-                            {
-                                ch.startElement("value");
-                                ch.text(itemValue);
-                                ch.endElement();
-                            }
+                            ch.startElement("label");
+                            item.getLabel().streamAsHTML(ch, locationData);
+                            ch.endElement();
+
+                            ch.startElement("value");
+                            ch.text(itemValue);
+                            ch.endElement();
                         }
                     }
 

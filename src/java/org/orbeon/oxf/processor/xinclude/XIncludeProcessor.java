@@ -13,20 +13,30 @@
  */
 package org.orbeon.oxf.processor.xinclude;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
+import org.dom4j.Document;
 import org.orbeon.oxf.common.OXFException;
 import org.orbeon.oxf.common.ValidationException;
 import org.orbeon.oxf.pipeline.api.PipelineContext;
 import org.orbeon.oxf.pipeline.api.XMLReceiver;
 import org.orbeon.oxf.processor.*;
+import org.orbeon.oxf.processor.pipeline.PipelineFunctionLibrary;
 import org.orbeon.oxf.processor.transformer.TransformerURIResolver;
+import org.orbeon.oxf.processor.transformer.XPathProcessor;
+import org.orbeon.oxf.processor.transformer.xslt.XSLTTransformer;
+import org.orbeon.oxf.properties.PropertySet;
+import org.orbeon.oxf.properties.PropertyStore;
+import org.orbeon.oxf.util.XPathCache;
 import org.orbeon.oxf.xml.*;
+import org.orbeon.oxf.xml.XMLUtils;
 import org.orbeon.oxf.xml.dom4j.LocationData;
+import org.orbeon.saxon.om.DocumentInfo;
+import org.orbeon.saxon.om.ValueRepresentation;
 import org.xml.sax.*;
 
 import javax.xml.transform.sax.SAXSource;
-import java.util.Enumeration;
-import java.util.Stack;
+import java.util.*;
 
 /**
  * XInclude processor.
@@ -43,7 +53,10 @@ public class XIncludeProcessor extends ProcessorImpl {
 
     private static Logger logger = Logger.getLogger(XIncludeProcessor.class);
 
+    private static final String INPUT_ATTRIBUTES = "attributes";
+
     public XIncludeProcessor() {
+        addInputInfo(new ProcessorInputOutputInfo(INPUT_ATTRIBUTES, XSLTTransformer.XSLT_PREFERENCES_CONFIG_NAMESPACE_URI));
         addInputInfo(new ProcessorInputOutputInfo(INPUT_CONFIG));
         addOutputInfo(new ProcessorInputOutputInfo(OUTPUT_DATA));
     }
@@ -52,6 +65,28 @@ public class XIncludeProcessor extends ProcessorImpl {
     public ProcessorOutput createOutput(final String name) {
         final ProcessorOutput output = new URIProcessorOutputImpl(XIncludeProcessor.this, name, INPUT_CONFIG) {
             public void readImpl(final PipelineContext pipelineContext, final XMLReceiver xmlReceiver) {
+
+                // Get transformer attributes if any
+                final Map<String, Boolean> configurationAttributes;
+                // Read attributes input only if connected (just in case, for backward compatibility, although it shouldn't happen)
+                if (getConnectedInputs().get(INPUT_ATTRIBUTES) != null) {
+                    // Read input as an attribute Map and cache it
+                    configurationAttributes = (Map<String, Boolean>) readCacheInputAsObject(pipelineContext, getInputByName(INPUT_ATTRIBUTES), new CacheableInputReader() {
+                        public Object read(PipelineContext context, ProcessorInput input) {
+                            final Document preferencesDocument = readInputAsDOM4J(context, input);
+                            final PropertyStore propertyStore = new PropertyStore(preferencesDocument);
+                            final PropertySet propertySet = propertyStore.getGlobalPropertySet();
+                            return propertySet.getObjectMap();
+                        }
+                    });
+                } else  {
+                    configurationAttributes = Collections.emptyMap();
+                }
+
+                // URL resolver is initialized with a parser configuration which can be configured to support external entities or not.
+                final XMLUtils.ParserConfiguration parserConfiguration = new XMLUtils.ParserConfiguration(false, false, !Boolean.FALSE.equals(configurationAttributes.get("external-entities")));
+                final TransformerURIResolver uriResolver = new TransformerURIResolver(XIncludeProcessor.this, pipelineContext, INPUT_CONFIG, parserConfiguration);
+
                 /**
                  * The code below reads the input in a SAX store, before replaying the SAX store to the
                  * XIncludeContentHandler.
@@ -72,8 +107,6 @@ public class XIncludeProcessor extends ProcessorImpl {
                  * then processes it. So when the processing happens, the readInput...() methods that reads the
                  * stylesheet has returned.
                  */
-//                        final ContentHandler debugContentHandler = new SAXLoggerProcessor.DebugContentHandler(contentHandler);
-                final TransformerURIResolver uriResolver = new TransformerURIResolver(XIncludeProcessor.this, pipelineContext, INPUT_CONFIG, false);
 
                 // Try to cache URI references
                 // NOTE: Always be careful not to cache refs to TransformerURIResolver. We seem to be fine here.
@@ -132,15 +165,23 @@ public class XIncludeProcessor extends ProcessorImpl {
 
         private boolean generateXMLBase;
 
-        public XIncludeXMLReceiver(PipelineContext pipelineContext, XMLReceiver xmlReceiver, URIProcessorOutputImpl.URIReferences uriReferences, TransformerURIResolver uriResolver) {
+        public XIncludeXMLReceiver(PipelineContext pipelineContext, XMLReceiver xmlReceiver,
+                                   URIProcessorOutputImpl.URIReferences uriReferences, TransformerURIResolver uriResolver) {
             this(true, pipelineContext, xmlReceiver, uriReferences, uriResolver, true, null, null, true, new OutputLocator());
         }
 
-        public XIncludeXMLReceiver(PipelineContext pipelineContext, XMLReceiver xmlReceiver, URIProcessorOutputImpl.URIReferences uriReferences, TransformerURIResolver uriResolver, String xmlBase, NamespaceSupport3 parentNamespaceSupport, boolean generateXMLBase, OutputLocator outputLocator) {
+        public XIncludeXMLReceiver(PipelineContext pipelineContext, XMLReceiver xmlReceiver,
+                                   URIProcessorOutputImpl.URIReferences uriReferences, TransformerURIResolver uriResolver,
+                                   String xmlBase, NamespaceSupport3 parentNamespaceSupport, boolean generateXMLBase,
+                                   OutputLocator outputLocator) {
             this(true, pipelineContext, xmlReceiver, uriReferences, uriResolver, false, xmlBase, parentNamespaceSupport, generateXMLBase, outputLocator);
         }
 
-        private XIncludeXMLReceiver(boolean processXInclude, PipelineContext pipelineContext, XMLReceiver xmlReceiver, URIProcessorOutputImpl.URIReferences uriReferences, TransformerURIResolver uriResolver, boolean topLevelContentHandler, String xmlBase, NamespaceSupport3 paremtNamespaceSupport, boolean generateXMLBase, OutputLocator outputLocator) {
+        private XIncludeXMLReceiver(boolean processXInclude, PipelineContext pipelineContext, XMLReceiver xmlReceiver,
+                                    URIProcessorOutputImpl.URIReferences uriReferences, TransformerURIResolver uriResolver,
+                                    boolean topLevelContentHandler,
+                                    String xmlBase, NamespaceSupport3 parentNamespaceSupport, boolean generateXMLBase,
+                                    OutputLocator outputLocator) {
             super(xmlReceiver);
             this.processXInclude = processXInclude;
             this.pipelineContext = pipelineContext;
@@ -148,7 +189,7 @@ public class XIncludeProcessor extends ProcessorImpl {
             this.uriResolver = uriResolver;
             this.topLevelContentHandler = topLevelContentHandler;
             this.xmlBase = xmlBase;
-            this.parentNamespaceSupport = paremtNamespaceSupport;
+            this.parentNamespaceSupport = parentNamespaceSupport;
             this.generateXMLBase = generateXMLBase;
             this.outputLocator = outputLocator;
         }
@@ -200,32 +241,56 @@ public class XIncludeProcessor extends ProcessorImpl {
 
                         final String href = attributes.getValue("href");
                         final String parse = attributes.getValue("parse");
-
+                        final String xpointer = attributes.getValue("xpointer");
+ 
                         // Whether to create/update xml:base attribute or not
                         final boolean generateXMLBase;
                         {
-                            final String disableXMLBase = attributes.getValue(XMLConstants.XXINCLUDE_NAMESPACE_URI, "omit-xml-base");
-                            generateXMLBase = !"true".equals(disableXMLBase);
+                            final String disableXMLBase = attributes.getValue(XMLConstants.XXINCLUDE_OMIT_XML_BASE.getNamespaceURI(), XMLConstants.XXINCLUDE_OMIT_XML_BASE.getName());
+                            final String fixupXMLBase = attributes.getValue(XMLConstants.XINCLUDE_FIXUP_XML_BASE.getNamespaceURI(), XMLConstants.XINCLUDE_FIXUP_XML_BASE.getName());
+                            generateXMLBase = !("true".equals(disableXMLBase) || "false".equals(fixupXMLBase));
                         }
 
                         if (parse != null && !parse.equals("xml"))
                             throw new ValidationException("Invalid 'parse' attribute value: " + parse, new LocationData(outputLocator));
+
+                        if (xpointer != null && !(xpointer.startsWith("xpath(") && xpointer.endsWith(")")))
+                            throw new ValidationException("Invalid 'xpointer' attribute value: " + xpointer, new LocationData(outputLocator));
 
                         String systemId = null;
                         try {
                             // Get SAXSource
                             final String base = outputLocator == null ? null : outputLocator.getSystemId();
                             final SAXSource source = (SAXSource) uriResolver.resolve(href, base);
-                            final XMLReader xmlReader = source.getXMLReader();
-                            xmlReader.setContentHandler(new XIncludeXMLReceiver(pipelineContext, getXMLReceiver(), uriReferences, uriResolver, source.getSystemId(), namespaceSupport, generateXMLBase, outputLocator));
 
-                            // Keep URI reference
-                            if (uriReferences != null)
-                                uriReferences.addReference(base, href, null, null, null, null);
+                            if (xpointer != null) {
+                                // Experimental support for xpath() scheme
+                                final String xpath = xpointer.substring("xpath(".length(), xpointer.length() - 1);
 
-                            // Read document
-                            systemId = source.getSystemId();
-                            xmlReader.parse(new InputSource(systemId)); // Yeah, the SAX API doesn't make much sense
+                                // Document is read entirely in memory for XPath processing
+                                final DocumentInfo document = TransformerUtils.readTinyTree(XPathCache.getGlobalConfiguration(), source, false);
+                                final List result = XPathCache.evaluate(pipelineContext, document, xpath, new NamespaceMapping(getPrefixMappings()),
+                                        Collections.<String, ValueRepresentation>emptyMap(), PipelineFunctionLibrary.instance(), null, source.getSystemId(), null);
+
+                                // Each resulting object is output through the next level of processing
+                                for (final Object o : result) {
+                                    final XIncludeXMLReceiver newReceiver = new XIncludeXMLReceiver(pipelineContext, getXMLReceiver(), uriReferences, uriResolver, source.getSystemId(), namespaceSupport, generateXMLBase, outputLocator);
+                                    XPathProcessor.streamResult(pipelineContext, newReceiver, o, new LocationData(outputLocator));
+                                }
+
+                            } else {
+                                // No xpointer attribute specified, just stream the child document
+                                final XMLReader xmlReader = source.getXMLReader();
+                                xmlReader.setContentHandler(new XIncludeXMLReceiver(pipelineContext, getXMLReceiver(), uriReferences, uriResolver, source.getSystemId(), namespaceSupport, generateXMLBase, outputLocator));
+
+                                // Keep URI reference
+                                if (uriReferences != null)
+                                    uriReferences.addReference(base, href, null, null, null, null);
+
+                                // Read document
+                                systemId = source.getSystemId();
+                                xmlReader.parse(new InputSource(systemId)); // Yeah, the SAX API doesn't make much sense
+                            }
 
                         } catch (Exception e) {
                             // Resource error, must go to fallback if possible
@@ -257,6 +322,26 @@ public class XIncludeProcessor extends ProcessorImpl {
             }
 
             level++;
+        }
+
+        private Map<String, String> getPrefixMappings() throws SAXException {
+            final Map<String, String> result = new HashMap<String, String>();
+
+            for (Enumeration e = namespaceSupport.getPrefixes(); e.hasMoreElements();) {
+                final String namespacePrefix = (String) e.nextElement();
+                if (StringUtils.isNotBlank(namespacePrefix))
+                    result.put(namespacePrefix, namespaceSupport.getURI(namespacePrefix));
+            }
+
+            // Default namespace if present
+            final String defaultNamespaceURI = namespaceSupport.getURI("");
+            if (StringUtils.isNotBlank(defaultNamespaceURI))
+                result.put("", defaultNamespaceURI);
+
+            // Just in case this is missing
+            result.put(XMLConstants.XML_PREFIX, XMLConstants.XML_URI);
+
+            return result;
         }
 
         private void sendClearStartPrefixMappings() throws SAXException {

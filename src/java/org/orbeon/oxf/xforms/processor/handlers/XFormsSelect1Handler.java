@@ -133,7 +133,7 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
                               final XFormsValueControl xformsSelect1Control, Itemset itemset,
                               final boolean isMultiple, final boolean isFull, boolean isBooleanInput) throws SAXException {
 
-        final ContentHandler contentHandler = handlerContext.getController().getOutput();
+        final XMLReceiver xmlReceiver = handlerContext.getController().getOutput();
 
         final AttributesImpl containerAttributes = getContainerAttributes(uri, localname, attributes, effectiveId, xformsSelect1Control, !isFull);
 
@@ -157,11 +157,11 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
 
                     if (isHTMLDisabled(xformsSelect1Control))
                         outputDisabledAttribute(containerAttributes);
-                    contentHandler.startElement(XMLConstants.XHTML_NAMESPACE_URI, "div", divQName, containerAttributes);
+                    xmlReceiver.startElement(XMLConstants.XHTML_NAMESPACE_URI, "div", divQName, containerAttributes);
                     if (itemset != null) { // can be null if the control is non-relevant
-                        outputJSONTreeInfo(xformsSelect1Control, itemset, isMultiple, contentHandler);
+                        outputJSONTreeInfo(xformsSelect1Control, itemset, isMultiple, xmlReceiver);
                     }
-                    contentHandler.endElement(XMLConstants.XHTML_NAMESPACE_URI, "div", divQName);
+                    xmlReceiver.endElement(XMLConstants.XHTML_NAMESPACE_URI, "div", divQName);
 
                 } else if (isMenu) {
                     // xxforms:menu appearance
@@ -174,11 +174,11 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
 
                     if (isHTMLDisabled(xformsSelect1Control))
                         outputDisabledAttribute(containerAttributes);
-                    contentHandler.startElement(XMLConstants.XHTML_NAMESPACE_URI, "div", divQName, containerAttributes);
+                    xmlReceiver.startElement(XMLConstants.XHTML_NAMESPACE_URI, "div", divQName, containerAttributes);
                     if (itemset != null) { // can be null if the control is non-relevant
                         // Create xhtml:div with initial menu entries
                         {
-                            itemset.visit(contentHandler, new ItemsetListener() {
+                            itemset.visit(xmlReceiver, new ItemsetListener() {
 
                                 private boolean groupJustStarted = false;
 
@@ -229,7 +229,8 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
                                     reusableAttributes.addAttribute("", "href", "href", ContentHandlerHelper.CDATA, "#");
                                     contentHandler.startElement(XMLConstants.XHTML_NAMESPACE_URI, "a", aQName, reusableAttributes);
 
-                                    final String text = item.getLabel();
+                                    assert !item.getLabel().isHTML();
+                                    final String text = item.getLabel().getLabel();
                                     contentHandler.characters(text.toCharArray(), 0, text.length());
 
                                     contentHandler.endElement(XMLConstants.XHTML_NAMESPACE_URI, "a", aQName);
@@ -251,13 +252,13 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
                         reusableAttributes.clear();
                         reusableAttributes.addAttribute("", "class", "class", ContentHandlerHelper.CDATA, "xforms-initially-hidden");
 
-                        contentHandler.startElement(XMLConstants.XHTML_NAMESPACE_URI, "div", divQName, reusableAttributes);
+                        xmlReceiver.startElement(XMLConstants.XHTML_NAMESPACE_URI, "div", divQName, reusableAttributes);
                         if (itemset != null) { // can be null if the control is non-relevant
-                            outputJSONTreeInfo(xformsSelect1Control, itemset, isMultiple, contentHandler);
+                            outputJSONTreeInfo(xformsSelect1Control, itemset, isMultiple, xmlReceiver);
                         }
-                        contentHandler.endElement(XMLConstants.XHTML_NAMESPACE_URI, "div", divQName);
+                        xmlReceiver.endElement(XMLConstants.XHTML_NAMESPACE_URI, "div", divQName);
                     }
-                    contentHandler.endElement(XMLConstants.XHTML_NAMESPACE_URI, "div", divQName);
+                    xmlReceiver.endElement(XMLConstants.XHTML_NAMESPACE_URI, "div", divQName);
 
                 } else {
                     // Create xhtml:select
@@ -272,7 +273,7 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
 
                     if (isHTMLDisabled(xformsSelect1Control))
                         outputDisabledAttribute(containerAttributes);
-                    contentHandler.startElement(XMLConstants.XHTML_NAMESPACE_URI, "select", selectQName, containerAttributes);
+                    xmlReceiver.startElement(XMLConstants.XHTML_NAMESPACE_URI, "select", selectQName, containerAttributes);
                     {
                         final String optionQName = XMLUtils.buildQName(xhtmlPrefix, "option");
                         final String optGroupQName = XMLUtils.buildQName(xhtmlPrefix, "optgroup");
@@ -287,7 +288,7 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
     //                                            Collections.EMPTY_LIST, "", xformsControl.getValue(pipelineContext), 1));
     //                        }
 
-                            itemset.visit(contentHandler, new ItemsetListener() {
+                            itemset.visit(xmlReceiver, new ItemsetListener() {
 
                                 private int optgroupCount = 0;
 
@@ -302,7 +303,8 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
 
                                 public void startItem(ContentHandler contentHandler, Item item, boolean first) throws SAXException {
 
-                                    final String label = item.getLabel();
+                                	assert !item.getLabel().isHTML();
+                                    final String label = item.getLabel().getLabel();
                                     final String value = item.getValue();
 
                                     if (value == null) {
@@ -325,35 +327,32 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
                             });
                         }
                     }
-                    contentHandler.endElement(XMLConstants.XHTML_NAMESPACE_URI, "select", selectQName);
+                    xmlReceiver.endElement(XMLConstants.XHTML_NAMESPACE_URI, "select", selectQName);
                 }
             }
         } else {
             // Read-only mode
 
             final String spanQName = XMLUtils.buildQName(xhtmlPrefix, "span");
-            contentHandler.startElement(XMLConstants.XHTML_NAMESPACE_URI, "span", spanQName, containerAttributes);
+            xmlReceiver.startElement(XMLConstants.XHTML_NAMESPACE_URI, "span", spanQName, containerAttributes);
             if (!handlerContext.isTemplate()) {
                 final String value = (xformsSelect1Control == null || xformsSelect1Control.getValue(pipelineContext) == null) ? "" : xformsSelect1Control.getValue(pipelineContext);
-                final StringBuilder sb = new StringBuilder();
                 if (itemset != null) {
                     int selectedFound = 0;
-                    for (final Item currentItem: itemset.toList()) {
+                    final ContentHandlerHelper ch = new ContentHandlerHelper(xmlReceiver);
+                    for (final Item currentItem : itemset.toList()) {
                         if (XFormsItemUtils.isSelected(isMultiple, value, currentItem.getValue())) {
                             if (selectedFound > 0)
-                                sb.append(" - ");
-                            sb.append(currentItem.getLabel());
+                                ch.text(" - ");
+
+                            currentItem.getLabel().streamAsHTML(ch, xformsSelect1Control.getLocationData());
+
                             selectedFound++;
                         }
                     }
                 }
-
-                if (sb.length() > 0) {
-                    final String result = sb.toString();
-                    contentHandler.characters(result.toCharArray(), 0, result.length());
-                }
             }
-            contentHandler.endElement(XMLConstants.XHTML_NAMESPACE_URI, "span", spanQName);
+            xmlReceiver.endElement(XMLConstants.XHTML_NAMESPACE_URI, "span", spanQName);
         }
     }
 
@@ -429,7 +428,7 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
             handleItemFull(pipelineContext, baseHandler, contentHandler, reusableAttributes, attributes,
                     xhtmlPrefix, spanQName, containingDocument, null, effectiveId, itemEffectiveId, isMultiple, fullItemType,
                     new Item(isMultiple, false, null, // make sure the value "$xforms-template-value$" is not encrypted
-                            "$xforms-template-label$", "$xforms-template-value$"), true);
+                            new Item.Label("$xforms-template-label$", false), "$xforms-template-value$"), true);
         }
         contentHandler.endElement(XMLConstants.XHTML_NAMESPACE_URI, "span", spanQName);
     }
@@ -463,8 +462,9 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
         contentHandler.startElement(XMLConstants.XHTML_NAMESPACE_URI, "span", spanQName, spanAttributes);
 
         {
-            final String itemLabel = item.getLabel();
-            if (itemLabel != null) { // null only for xforms|input:xxforms-type(xs:boolean)
+            final Item.Label itemLabel = item.getLabel();
+            final boolean labelNonEmpty = itemLabel != null && !itemLabel.getLabel().isEmpty();// empty only for xforms|input:xxforms-type(xs:boolean)
+            if (labelNonEmpty) {
                 reusableAttributes.clear();
                 outputLabelForStart(handlerContext, reusableAttributes, itemEffectiveId, itemEffectiveId, LHHAC.LABEL, "label", false);
             }
@@ -501,8 +501,8 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
                 contentHandler.endElement(XMLConstants.XHTML_NAMESPACE_URI, "input", inputQName);
             }
 
-            if (itemLabel != null) { // null only for xforms|input:xxforms-type(xs:boolean)
-                outputLabelForEnd(handlerContext, "label", itemLabel, false);// TODO: may be HTML for full appearance
+            if (labelNonEmpty) {
+                outputLabelForEnd(handlerContext, "label", itemLabel.getLabel(), itemLabel.isHTML());
             }
         }
 
@@ -537,7 +537,8 @@ public class XFormsSelect1Handler extends XFormsControlLifecyleHandler {
 
         // xhtml:option
         contentHandler.startElement(XMLConstants.XHTML_NAMESPACE_URI, "option", optionQName, optionAttributes);
-        final String label = item.getLabel();
+        assert !item.getLabel().isHTML();
+        final String label = item.getLabel().getLabel();
         if (label != null)
             contentHandler.characters(label.toCharArray(), 0, label.length());
         contentHandler.endElement(XMLConstants.XHTML_NAMESPACE_URI, "option", optionQName);

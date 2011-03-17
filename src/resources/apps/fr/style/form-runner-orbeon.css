@@ -109,7 +109,6 @@ p, fieldset, table { margin-bottom: 1em }
 
 .fr-container {
     background-color: white;
-    /*border: 1px solid #cccccc;*/
 }
 
 .fr-separator {
@@ -152,8 +151,7 @@ p, fieldset, table { margin-bottom: 1em }
 .xforms-alert-active {
     font-weight: bold;
     font-size: smaller;
-    background-color: #DF731B;
-    color: white;
+    color: #DF731B;
     border-radius: 3px; -moz-border-radius: 2px; -webkit-border-radius: 3px; -ms-border-radius: 2px /* radius appears differently w/ Safari 3.1 vs. Firefox 3.0b4*/
 }
 
@@ -258,7 +256,7 @@ h1 .xforms-trigger-appearance-xxforms-minimal, h2 .xforms-trigger-appearance-xxf
 /* Add background to static read-only fields and special output fields */
 .xforms-static, .fr-static { min-height: 1em }
 .fr-mode-view .fr-grid-content { margin-bottom: 1em; background-color: #E8F2FF }
-.fr-mode-view .fr-repeat .fr-grid-content { background-color: transparent } 
+.fr-mode-view .fr-repeat .fr-grid-content { background-color: transparent; margin-bottom: 0 }
 .fr-mode-view #fr-form-group { margin-top: 1em }
 
 /* Messages area */

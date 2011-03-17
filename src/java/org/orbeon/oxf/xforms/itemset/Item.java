@@ -17,10 +17,17 @@ import org.apache.commons.lang.StringUtils;
 import org.dom4j.QName;
 import org.orbeon.oxf.util.PropertyContext;
 import org.orbeon.oxf.xforms.XFormsUtils;
+import org.orbeon.oxf.xforms.control.controls.XFormsCaseControl;
+import org.orbeon.oxf.xml.ContentHandlerHelper;
+import org.orbeon.oxf.xml.XMLUtils;
+import org.orbeon.oxf.xml.dom4j.LocationData;
 import org.xml.sax.ContentHandler;
 import org.xml.sax.SAXException;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Represents an item (xforms:item, xforms:choice, or item in itemset).
@@ -29,7 +36,7 @@ public class Item implements ItemContainer {
 
     private final boolean isEncryptValue; // whether this item is part of an open selection control
     private final Map<QName, String> attributes;
-    private final String label;
+    private final Label label;
     private final String value;
 
     private int level;
@@ -37,7 +44,7 @@ public class Item implements ItemContainer {
     private ItemContainer parent;
     private List<Item> children;
 
-    public Item(boolean isMultiple, boolean isEncryptValue, Map<QName, String> attributes, String label, String value) {
+    public Item(boolean isMultiple, boolean isEncryptValue, Map<QName, String> attributes, Label label, String value) {
 
         // NOTE: As of 2010-08-18, label can be null in these cases:
         //
@@ -102,7 +109,7 @@ public class Item implements ItemContainer {
         return attributes;
     }
 
-    public String getLabel() {
+    public Label getLabel() {
         return label;
     }
 
@@ -118,8 +125,8 @@ public class Item implements ItemContainer {
         return value == null ? "" : isEncryptValue ? XFormsItemUtils.encryptValue(propertyContext, value) : XFormsUtils.escapeJavaScript(value);
     }
 
-    public String getExternalJSLabel() {
-        return label == null? "" : XFormsUtils.escapeJavaScript(label);
+    public String getExternalJSLabel(PropertyContext propertyContext, final LocationData locationData) {
+        return label == null? "" : XFormsUtils.escapeJavaScript(label.isHTML() ? XFormsCaseControl.getEscapedHTMLValue(propertyContext, locationData, label.getLabel()) : XMLUtils.escapeXMLMinimal(label.getLabel())); //TODO check if we need to rewrite URLs?
     }
 
     /**
@@ -207,5 +214,54 @@ public class Item implements ItemContainer {
         sb.append(getValue());
 
         return sb.toString();
+    }
+
+    public static class Label {
+
+        private final String label;
+        private final boolean isHTML;
+
+        public Label(String label, boolean isHTML) {
+            this.label = label;
+            this.isHTML = isHTML;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+
+        public boolean isHTML() {
+            return isHTML;
+        }
+
+        public void streamAsHTML(ContentHandlerHelper ch, LocationData locationData) {
+            if (isHTML) {
+                XFormsUtils.streamHTMLFragment(ch.getXmlReceiver(), label, locationData, "");
+            } else {
+                ch.text(StringUtils.defaultString(label));
+            }
+        }
+
+        @Override
+        public int hashCode() {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + (isHTML ? 1231 : 1237);
+            result = prime * result + ((label == null) ? 0 : label.hashCode());
+            return result;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj)
+                return true;
+            if (obj == null)
+                return false;
+            if (getClass() != obj.getClass())
+                return false;
+
+            final Label other = (Label) obj;
+            return isHTML == other.isHTML && XFormsUtils.compareStrings(label, other.label);
+        }
     }
 }

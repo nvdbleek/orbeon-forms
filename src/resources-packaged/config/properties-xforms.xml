@@ -104,7 +104,6 @@
     <property as="xs:boolean"  name="oxf.xforms.resources.javascript-at-bottom"             value="true"/>
     <property as="xs:string"   name="oxf.xforms.resources.baseline"                         value="fr:button fr:tabview fr:autocomplete"/>
 
-    <property as="xs:boolean" name="oxf.xforms.optimize-relevance"                          value="false"/>
     <property as="xs:boolean" name="oxf.xforms.expose-xpath-types"                          value="false"/>
     <property as="xs:boolean" name="oxf.xforms.session-heartbeat"                           value="true"/>
     <property as="xs:boolean" name="oxf.xforms.host-language-avts"                          value="true"/>
@@ -137,12 +136,27 @@
     <property as="xs:string"  name="oxf.xforms.xbl.fr.map.key"                              value=""/>
     <property as="xs:string"  name="oxf.xforms.xbl.fr.map.clientid"                         value=""/>
     <property as="xs:boolean" name="oxf.xforms.xbl.fr.map.ssl"                              value="false"/>
+
     <property as="xs:integer" name="oxf.xforms.xbl.fr.autocomplete.max-results-displayed"   value="10"/>
+
     <property as="xs:string"  name="oxf.xforms.xbl.fr.currency.prefix"                      value="$"/>
     <property as="xs:string"  name="oxf.xforms.xbl.fr.currency.digits-after-decimal"        value="2"/>
+    <property as="xs:string"  name="oxf.xforms.xbl.fr.currency.decimal-separator"           value="."/>
+    <property as="xs:string"  name="oxf.xforms.xbl.fr.currency.grouping-separator"          value=","/>
+
+    <property as="xs:string"  name="oxf.xforms.xbl.fr.number.prefix"                        value=""/>
+    <property as="xs:string"  name="oxf.xforms.xbl.fr.number.digits-after-decimal"          value="0"/>
+    <property as="xs:string"  name="oxf.xforms.xbl.fr.number.decimal-separator"             value="."/>
+    <property as="xs:string"  name="oxf.xforms.xbl.fr.number.grouping-separator"            value=","/>
+
     <property as="xs:string"  name="oxf.xforms.xbl.fr.fusion-charts.uri-to-swf"             value=""/>
+
     <property as="xs:boolean" name="oxf.xforms.xbl.fr.accordion.open-closes-others"         value="false"/>
+
     <property as="xs:boolean" name="oxf.xforms.xbl.fr.tabview.tab-changes-context"          value="true"/>
+
+    <property as="xs:integer" name="oxf.xforms.xbl.fr.expandable-output.max-characters"     value="60"/>
+    <property as="xs:integer" name="oxf.xforms.xbl.fr.expandable-output.tolerance"          value="20"/>
 
     <!-- Automatically search for XBL components in fr:* namespace -->
     <property as="xs:string"  name="oxf.xforms.xbl.mapping.orbeon"                          value="http://orbeon.org/oxf/xml/form-runner"/>

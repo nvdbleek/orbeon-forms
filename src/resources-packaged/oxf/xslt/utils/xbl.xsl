@@ -22,7 +22,7 @@
     <xsl:function name="xxbl:parameter">
         <xsl:param name="context" as="element()"/>
         <xsl:param name="property" as="xs:string"/>
-        
+
         <xsl:variable name="prefix" select="prefix-from-QName(node-name($context))"/>
         <xsl:variable name="namespace" select="namespace-uri($context)"/>
         <xsl:variable name="component" select="local-name($context)"/>
@@ -33,23 +33,29 @@
 
         <xsl:choose>
             <xsl:when test="exists($context/*[local-name() = $property and namespace-uri() = $namespace])">
-                <xforms:input class="xbl-{$prefix}-{$component}-{$property}" style="display: none" xxbl:attr="{$prefix}:{$property}/@*" xxbl:scope="outer">
+                <!-- Parameter bound to a node -->
+                <!-- Create an input field with all the binding attributes of the nested element, i.e. fr:foo/fr:bar/@ref -->
+                <xxforms:variable name="{$property}">
+                    <xxforms:sequence xxbl:attr="{$prefix}:{$property}/(@model | @context | @ref | @bind)" select="." xxbl:scope="outer"/>
+                </xxforms:variable>
+                <xforms:input ref="${$property}" class="xbl-{$prefix}-{$component}-{$property}" style="display: none">
                     <xxforms:script ev:event="xforms-value-changed">
-                        <xsl:text>YAHOO.xbl.</xsl:text>
+                        <xsl:text>ORBEON.xforms.XBL.callValueChanged("</xsl:text>
                         <xsl:value-of select="$prefix"/>
-                        <xsl:text>.</xsl:text>
+                        <xsl:text>", "</xsl:text>
                         <xsl:value-of select="xxbl:to-camel-case($component)"/>
-                        <xsl:text>.instance(this).parameter</xsl:text>
+                        <xsl:text>", "</xsl:text>
                         <xsl:value-of select="xxbl:to-camel-case($property)"/>
-                        <xsl:text>Changed();</xsl:text>
+                        <xsl:text>");</xsl:text>
                     </xxforms:script>
                 </xforms:input>
             </xsl:when>
             <xsl:otherwise>
-                <!-- We have a "default" value in the variable so we can detect the difference between the attribute value being the empty string vs. the attribute not being there -->
-                <xxforms:variable name="{$property}" xbl:attr="xbl:text={$property}">&#xb7;</xxforms:variable>
-                <xforms:output class="xbl-{$prefix}-{$component}-{$property}" style="display: none"
-                    value="if (${$property} != '&#xb7;') then ${$property} else xxforms:property('oxf.xforms.xbl.{$prefix}.{$component}.{$property}')"/>
+                <!-- Parameter is constant -->
+                <!-- NOTE: We have a "default" value in the variable so we can detect the difference between the attribute value being the empty string vs. the attribute not being there -->
+                <xxforms:variable name="{$property}-orbeon-xbl" xbl:attr="xbl:text={$property}">&#xb7;</xxforms:variable>
+                <xxforms:variable name="{$property}" select="if (${$property}-orbeon-xbl != '&#xb7;') then ${$property}-orbeon-xbl else xxforms:property('oxf.xforms.xbl.{$prefix}.{$component}.{$property}')"/>
+                <xforms:output class="xbl-{$prefix}-{$component}-{$property}" style="display: none" value="${$property}"/>
             </xsl:otherwise>
         </xsl:choose>
 

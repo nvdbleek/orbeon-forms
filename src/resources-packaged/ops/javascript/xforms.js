@@ -42,9 +42,9 @@ var DEFAULT_LOADING_TEXT = "Loading...";
     /**
      * Shortcuts
      */
-    var YD, OD;
+    var YD = YAHOO.util.Dom;
+    var OD;
     _.defer(function() {
-        YD = YAHOO.util.Dom;
         OD = ORBEON.util.Dom;
     });
 
@@ -997,6 +997,17 @@ var DEFAULT_LOADING_TEXT = "Loading...";
                     ORBEON.xforms.Globals.modalProgressPanel.render(document.body);
                 }
                 ORBEON.xforms.Globals.modalProgressPanel.show();
+            },
+
+            /**
+             * For the initial overlays (error dialog, loading indicator, message), which don't contains any XForms
+             * markup that relies on the container being rendered on the page to initialize, we want the overlay
+             * to be really hidden so it doesn't constrain how wide or high our browser needs to be.
+             */
+            overlayUseDisplayHidden: function(overlay) {
+                YD.setStyle(overlay.element, "display", "none");
+                overlay.beforeShowEvent.subscribe(function() { YD.setStyle(overlay.element, "display", "block"); });
+                overlay.beforeHideEvent.subscribe(function() { YD.setStyle(overlay.element, "display", "none"); });
             },
 
             countOccurrences: function(str, character) {
@@ -3898,6 +3909,7 @@ ORBEON.xforms.XBL = {
 
     /**
      * To be documented on Wiki.
+     * TODO: cssClass isn't used anymore and should most likely be removed as a parameter and remove in every call to declareClass().
      */
     declareClass: function(xblClass, cssClass) {
         var doNothingSingleton = null;
@@ -3910,8 +3922,8 @@ ORBEON.xforms.XBL = {
             // Get the top-level element in the HTML DOM corresponding to this control
             var container = target == null || ! YAHOO.util.Dom.inDocument(target, document)
                 ? null
-                : (YAHOO.util.Dom.hasClass(target, cssClass) ? target
-                    : YAHOO.util.Dom.getAncestorByClassName(target, cssClass));
+                : (YAHOO.util.Dom.hasClass(target, "xbl-component") ? target
+                    : YAHOO.util.Dom.getAncestorByClassName(target, "xbl-component"));
 
             // The first time instance() is called for this class, override init() on the class object
             // to make sure that the init method is not called more than once
@@ -3965,6 +3977,15 @@ ORBEON.xforms.XBL = {
                 return instance;
             }
         };
+    },
+
+    callValueChanged: function(prefix, component, property) {
+        var partial = YAHOO.xbl;                                    if (partial == null) return;
+        partial = partial[prefix];                                  if (partial == null) return;
+        partial = partial[component];                               if (partial == null) return;
+        partial = partial.instance(this);                           if (partial == null) return;
+        var method = partial["parameter" + property + "Changed"];   if (method == null) return;
+        partial.method();
     },
 
     componentInitialized: new YAHOO.util.CustomEvent(null, null, false, YAHOO.util.CustomEvent.FLAT)
@@ -4178,6 +4199,7 @@ ORBEON.xforms.Init = {
                             YAHOO.util.Dom.getViewportWidth() - YAHOO.util.Dom.getX(formChild),
                             YAHOO.util.Dom.getY(formChild)
                         ];
+                        ORBEON.util.Utils.overlayUseDisplayHidden(ORBEON.xforms.Globals.formLoadingLoadingOverlay[formID]);
                         formChild.style.right = "auto";
                         xformsLoadingCount++;
                     } else if (ORBEON.util.Dom.isElement(formChild) && YAHOO.util.Dom.hasClass(formChild, "xforms-error-panel")) {
@@ -4194,6 +4216,7 @@ ORBEON.xforms.Init = {
                             draggable: true
                         });
                         errorPanel.render();
+                        ORBEON.util.Utils.overlayUseDisplayHidden(errorPanel);
                         errorPanel.beforeHideEvent.subscribe(ORBEON.xforms.Events.errorPanelClosed, formID);
                         ORBEON.xforms.Globals.formErrorPanel[formID] = errorPanel;
 

@@ -28,12 +28,15 @@ import org.orbeon.oxf.xforms.analysis.XPathDependencies;
 import org.orbeon.oxf.xforms.control.XFormsControl;
 import org.orbeon.oxf.xforms.control.XFormsValueControl;
 import org.orbeon.oxf.xforms.event.XFormsEvents;
+import org.orbeon.oxf.xforms.processor.XFormsResourceServer;
+import org.orbeon.oxf.xforms.submission.Headers;
 import org.orbeon.oxf.xforms.xbl.XBLContainer;
 import org.orbeon.oxf.xml.dom4j.Dom4jUtils;
 import org.xml.sax.helpers.AttributesImpl;
 
 import java.net.URI;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -49,7 +52,7 @@ public class XFormsOutputControl extends XFormsValueControl {
     private static final String DOWNLOAD_APPEARANCE = Dom4jUtils.qNameToExplodedQName(XFormsConstants.XXFORMS_DOWNLOAD_APPEARANCE_QNAME);
 
     // Optional display format
-    private String format;
+    private final String format;
 
     // Value attribute
     private String valueAttribute;
@@ -86,7 +89,7 @@ public class XFormsOutputControl extends XFormsValueControl {
     protected void evaluateImpl(PropertyContext propertyContext) {
         super.evaluateImpl(propertyContext);
 
-        getState(propertyContext);
+        getState();
         getFileMediatype(propertyContext);
         getFileName(propertyContext);
         getFileSize(propertyContext);
@@ -107,7 +110,7 @@ public class XFormsOutputControl extends XFormsValueControl {
             value = (tempValue != null) ? tempValue : "";
         } else {
             // Value comes from the XPath expression within the value attribute
-            value = evaluateAsString(propertyContext, valueAttribute);
+            value = evaluateAsString(propertyContext, valueAttribute, bindingContext.getNodeset(), bindingContext.getPosition());
         }
         setValue((value != null) ? value : "");
     }
@@ -115,7 +118,11 @@ public class XFormsOutputControl extends XFormsValueControl {
     @Override
     protected void evaluateExternalValue(PropertyContext propertyContext) {
 
-        final String internalValue = getValue(propertyContext);
+        assert isRelevant();
+
+        final String internalValue = getValue();
+        assert internalValue != null;
+
         final String updatedValue;
         if (DOWNLOAD_APPEARANCE.equals(getAppearance())) {
             // Download appearance
@@ -144,6 +151,17 @@ public class XFormsOutputControl extends XFormsValueControl {
         setExternalValue(updatedValue);
     }
 
+    // For unit tests
+    public Map<String, String[]> testEvaluateHeaders(PropertyContext propertyContext) {
+        return evaluateHeaders(propertyContext);
+    }
+
+    private Map<String, String[]> evaluateHeaders(PropertyContext propertyContext) {
+        getContextStack().setBinding(this); // evaluateHeaders() requires this (bad, but do this until we can pass BindingContext directly)
+        return Headers.evaluateHeaders(propertyContext, getXBLContainer(), getContextStack(),
+                getEffectiveId(), getElementAnalysis().element());
+    }
+
     private String proxyValueIfNeeded(PropertyContext propertyContext, String internalValue, String defaultValue, String mediatype) {
         String updatedValue;
         final String typeName = getBuiltinTypeName();
@@ -157,7 +175,7 @@ public class XFormsOutputControl extends XFormsValueControl {
                     final String resolvedURI = servletRewriter.rewriteResourceURL(rebasedURI.toString(), ExternalContext.Response.REWRITE_MODE_ABSOLUTE_PATH_NO_CONTEXT);
 
                     final long lastModified = NetUtils.getLastModifiedIfFast(resolvedURI);
-                    updatedValue = NetUtils.proxyURI(propertyContext, resolvedURI, fileInfo.getFileName(propertyContext), mediatype, lastModified);
+                    updatedValue = XFormsResourceServer.proxyURI(propertyContext, resolvedURI, fileInfo.getFileName(propertyContext), mediatype, lastModified, evaluateHeaders(propertyContext));
                 } else {
                     // Otherwise we leave the value as is
                     updatedValue = internalValue;
@@ -167,7 +185,7 @@ public class XFormsOutputControl extends XFormsValueControl {
                 // TODO: avoid cast to PipelineContext
                 final String uri = NetUtils.base64BinaryToAnyURI((PipelineContext) propertyContext, internalValue, NetUtils.SESSION_SCOPE);
                 // Value of -1 for lastModified will cause XFormsResourceServer to set Last-Modified and Expires properly to "now".
-                updatedValue = NetUtils.proxyURI(propertyContext, uri, fileInfo.getFileName(propertyContext), mediatype, -1);
+                updatedValue = XFormsResourceServer.proxyURI(propertyContext, uri, fileInfo.getFileName(propertyContext), mediatype, -1, evaluateHeaders(propertyContext));
 
             } else {
                 // Return dummy image
@@ -231,8 +249,8 @@ public class XFormsOutputControl extends XFormsValueControl {
         return (valueAttribute == null) ? super.getType() : null;
     }
 
-    public String getState(PropertyContext propertyContext) {
-        return fileInfo.getState(propertyContext);
+    public String getState() {
+        return fileInfo.getState();
     }
 
     public String getFileMediatype(PropertyContext propertyContext) {

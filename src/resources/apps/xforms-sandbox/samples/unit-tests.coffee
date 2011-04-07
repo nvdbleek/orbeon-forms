@@ -2,7 +2,7 @@ TestManager = YAHOO.tool.TestManager
 window.TestManager = TestManager
 
 # Test pages to run
-TestManager.setPages [
+pages = [
     "test-bug-checkbox-update"
     "test-bug-checkbox-update"
     "test-control-xhtml-area"
@@ -16,6 +16,7 @@ TestManager.setPages [
     "test-keypress"
     "test-loading-indicator"
     "test-message"
+    "test-min-viewport-width"
     "test-orbeon-dom"
     "test-output-update"
     "test-repeat"
@@ -30,11 +31,17 @@ TestManager.setPages [
     "xbl/orbeon/autocomplete/autocomplete-unittest"
     "xbl/orbeon/button/button-unittest"
     "xbl/orbeon/currency/currency-unittest"
+    "xbl/orbeon/date-picker/date-picker-unittest"
+]
+
+# The following unit tests have been taken out as they still need some work
     #"xbl/orbeon/datatable/datatable-dynamic-unittest"
     #"xbl/orbeon/datatable/datatable-structure-unittest"
     #"xbl/orbeon/datatable/datatable-unittest"
-    "xbl/orbeon/date-picker/date-picker-unittest"
-]
+
+# Load pages with plain theme (faster, and required by some tests that rely on width)
+pages = (page + "?orbeon-theme=plain" for page in pages)
+TestManager.setPages pages
 
 ORBEON.xforms.Events.orbeonLoadedEvent.subscribe () ->
 

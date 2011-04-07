@@ -147,7 +147,6 @@ public class XFormsStaticState implements XMLUtils.DebugXML {
      */
     public XFormsStaticState(PropertyContext propertyContext, Document staticStateDocument, String digest, Metadata metadata) {
         // Set XPath configuration
-        propertyContext.setAttribute(XPathCache.XPATH_CACHE_CONFIGURATION_PROPERTY, getXPathConfiguration());
         initialize(propertyContext, staticStateDocument, digest, metadata, null);
     }
 
@@ -160,9 +159,6 @@ public class XFormsStaticState implements XMLUtils.DebugXML {
      * @param encodedStaticState    encoded static state (digest + serialized XML)
      */
     public XFormsStaticState(PropertyContext propertyContext, String staticStateDigest, String encodedStaticState) {
-
-        // Set XPath configuration
-        propertyContext.setAttribute(XPathCache.XPATH_CACHE_CONFIGURATION_PROPERTY, getXPathConfiguration());
 
         // Decode encodedStaticState into staticStateDocument
         final Document staticStateDocument = XFormsUtils.decodeXML(propertyContext, encodedStaticState);
@@ -328,6 +324,13 @@ public class XFormsStaticState implements XMLUtils.DebugXML {
         // Then analyze controls
         analyzeComponentTree(propertyContext, xpathConfiguration, rootScope, controlsDocument.getRootElement(),
                 rootControlAnalysis, externalLHHA);
+
+        // Analyze new global XBL controls introduced above
+        // NOTE: should recursively check?
+        if (xblBindings != null)
+            for (final XBLBindings.Global global : xblBindings.getGlobals().values())
+                analyzeComponentTree(propertyContext, xpathConfiguration, rootScope, global.compactShadowTree.getRootElement(),
+                        rootControlAnalysis, externalLHHA);
 
         // Process deferred external LHHA elements
         for (final ExternalLHHAAnalysis entry : externalLHHA)
@@ -617,8 +620,22 @@ public class XFormsStaticState implements XMLUtils.DebugXML {
         }
     }
 
-    public Document getControlsDocument() {
-        return controlsDocument;
+    public List<Element> getTopLevelControlElements() {
+
+        final List<Element> result = new ArrayList<Element>();
+
+        if (controlsDocument != null)
+            result.add(controlsDocument.getRootElement());
+
+        if (xblBindings != null)
+            for (final XBLBindings.Global global : xblBindings.getGlobals().values())
+                result.add(global.compactShadowTree.getRootElement());
+
+        return result;
+    }
+
+    public boolean hasControls() {
+        return getTopLevelControlElements().size() > 0;
     }
 
     public Model getDefaultModelForScope(XBLBindings.Scope scope) {
@@ -1156,7 +1173,7 @@ public class XFormsStaticState implements XMLUtils.DebugXML {
                 handleControlsStatic(controlElementVisitorListener, currentElement, (ContainerTrait) currentElementAnalysis);
             } else if (XFormsControlFactory.isCoreControl(currentElement.getNamespaceURI(), elementName)
                     || xblBindings.isComponent(currentElement.getQName())
-                    || elementName.equals(XFormsConstants.XXFORMS_VARIABLE_NAME)
+                    || VariableAnalysis.isVariableElement(currentElement)
                     || (XFormsControlFactory.isLHHA(currentElement.getNamespaceURI(), elementName) && currentElement.attribute(XFormsConstants.FOR_QNAME) != null)) {
                 // Handle core control, component, variable, and external LHHA
                 currentElementAnalysis = controlElementVisitorListener.startVisitControl(currentElement, containerTrait, currentElementAnalysis, elementStaticId);

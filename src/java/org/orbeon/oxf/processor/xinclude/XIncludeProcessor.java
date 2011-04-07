@@ -282,13 +282,32 @@ public class XIncludeProcessor extends ProcessorImpl {
                                 // No xpointer attribute specified, just stream the child document
                                 final XMLReader xmlReader = source.getXMLReader();
                                 xmlReader.setContentHandler(new XIncludeXMLReceiver(pipelineContext, getXMLReceiver(), uriReferences, uriResolver, source.getSystemId(), namespaceSupport, generateXMLBase, outputLocator));
+                            }
 
-                                // Keep URI reference
-                                if (uriReferences != null)
-                                    uriReferences.addReference(base, href, null, null, null, null);
+                            // Read document
+                            systemId = source.getSystemId();
 
-                                // Read document
-                                systemId = source.getSystemId();
+                            if (xpointer != null) {
+                                // Experimental support for xpath() scheme
+                                final String xpath = xpointer.substring("xpath(".length(), xpointer.length() - 1);
+
+                                // Document is read entirely in memory for XPath processing
+                                final DocumentInfo document = TransformerUtils.readTinyTree(XPathCache.getGlobalConfiguration(), source, false);
+                                final List result = XPathCache.evaluate(pipelineContext, document, xpath, new NamespaceMapping(getPrefixMappings()),
+                                        Collections.<String, ValueRepresentation>emptyMap(), PipelineFunctionLibrary.instance(), null, source.getSystemId(), null);
+
+                                // Each resulting object is output through the next level of processing
+                                for (final Object o : result) {
+                                    final XIncludeXMLReceiver newReceiver = new XIncludeXMLReceiver(pipelineContext, getXMLReceiver(), uriReferences, uriResolver, source.getSystemId(), namespaceSupport, generateXMLBase, outputLocator);
+                                    XPathProcessor.streamResult(pipelineContext, newReceiver, o, new LocationData(outputLocator));
+                                }
+                            } else {
+                                // No xpointer attribute specified, just stream the child document
+                                final XMLReader xmlReader = source.getXMLReader();
+                                final XMLReceiver xmlReceiver = new XIncludeXMLReceiver(pipelineContext, getXMLReceiver(), uriReferences, uriResolver, source.getSystemId(), namespaceSupport, generateXMLBase, outputLocator);
+                                xmlReader.setContentHandler(xmlReceiver);
+                                xmlReader.setProperty(XMLConstants.SAX_LEXICAL_HANDLER, xmlReceiver);
+
                                 xmlReader.parse(new InputSource(systemId)); // Yeah, the SAX API doesn't make much sense
                             }
 

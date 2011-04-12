@@ -37,7 +37,20 @@ public class Portlet2ExternalContext extends PortletWebAppExternalContext implem
 
     private static final String OPS_CONTEXT_NAMESPACE_KEY = "org.orbeon.ops.portlet.namespace";
 
+    private static CustomContext customContext;
+    static {
+        try {
+            final Class<? extends CustomContext> customContextClass
+                    = (Class<? extends CustomContext>) Class.forName("org.orbeon.oxf.portlet.LiferayContext");
+            customContext = customContextClass.newInstance();
+        } catch (Exception e) {
+            // Silently ignore as this typically means that we are not in Liferay
+        }
+    }
+
     private class Request implements ExternalContext.Request {
+
+        private Request() {}
 
         private String namespace = null;
 
@@ -105,6 +118,7 @@ public class Portlet2ExternalContext extends PortletWebAppExternalContext implem
                 // should not rely on the presence of headers to function properly. The PortletRequest interface
                 // provides specific methods to access information normally available as HTTP headers: content-length,
                 // content-type, accept-language."
+                // NOTE: It seems like while Liferay 5 was making headers available, Liferay 6 doesn't anymore.
                 if (portletRequest instanceof ClientDataRequest) {
                     final ClientDataRequest clientDataRequest = (ClientDataRequest) portletRequest;
                     if (clientDataRequest.getContentType() != null)
@@ -671,7 +685,18 @@ public class Portlet2ExternalContext extends PortletWebAppExternalContext implem
     Portlet2ExternalContext(ProcessorService processorService, PipelineContext pipelineContext, PortletContext portletContext, Map<String, String> initAttributesMap, PortletRequest portletRequest) {
         this(processorService, portletContext, initAttributesMap);
         this.pipelineContext = pipelineContext;
-        this.portletRequest = portletRequest;
+
+        // Wrap PortletRequest if needed
+        if (customContext != null) {
+            try {
+                this.portletRequest = customContext.amendRequest(portletRequest);
+            } catch (Exception e) {
+                throw new OXFException(e);
+            }
+        } else {
+            this.portletRequest = portletRequest;
+        }
+
         if (portletRequest instanceof ClientDataRequest)
             this.clientDataRequest = (ClientDataRequest) portletRequest;
     }

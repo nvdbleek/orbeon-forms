@@ -13,7 +13,7 @@
  */
 package org.orbeon.oxf.cache;
 
-import org.orbeon.oxf.util.PropertyContext;
+import java.util.concurrent.locks.Lock;
 
 /**
  * Interface that cacheable objects can optionally implement to support callback methods.
@@ -22,22 +22,23 @@ public interface Cacheable {
 
     /**
      * Called when the object is added to the cache.
-     *
-     * @param propertyContext   current context
      */
-    void added(PropertyContext propertyContext);
+    void added();
 
     /**
      * Called when the object is explicitly removed from the cache.
-     *
-     * @param propertyContext   current context
      */
-    void removed(PropertyContext propertyContext);
+    void removed();
+
+    /**
+     * Optional lock the cache must obtain to evict the item from cache.
+     *
+     * @return lock or null
+     */
+    Lock getEvictionLock();
 
     /**
      * Called when the object is being evicted from cache.
-     *
-     * @param propertyContext   current context
      */
-    void evicted(PropertyContext propertyContext);
+    void evicted();
 }

@@ -16,7 +16,6 @@ package org.orbeon.oxf.xforms.state
 import org.orbeon.oxf.pipeline.api.ExternalContext
 import net.sf.ehcache.{Element => EhElement, _ }
 import config._
-import org.orbeon.oxf.util.PropertyContext
 import store.MemoryStoreEvictionPolicy
 import org.orbeon.oxf.xforms._
 
@@ -53,7 +52,7 @@ object EhcacheStateStore extends XFormsStateStore {
                 cache
         }
 
-    def storeDocumentState(propertyContext: PropertyContext, document: XFormsContainingDocument, session: ExternalContext.Session, isInitialState: Boolean) = {
+    def storeDocumentState(document: XFormsContainingDocument, session: ExternalContext.Session, isInitialState: Boolean) = {
 
         assert(document.getStaticState.isServerStateHandling)
 
@@ -71,8 +70,8 @@ object EhcacheStateStore extends XFormsStateStore {
         addOrReplaceOne(documentUUID, staticStateDigest + ":" + dynamicStateKey)
 
         // Static and dynamic states
-        addOrReplaceOne(staticStateDigest, document.getStaticState.getEncodedStaticState(propertyContext))
-        addOrReplaceOne(dynamicStateKey, document.createEncodedDynamicState(propertyContext, XFormsProperties.isGZIPState, false))
+        addOrReplaceOne(staticStateDigest, document.getStaticState.getEncodedStaticState)
+        addOrReplaceOne(dynamicStateKey, document.createEncodedDynamicState(XFormsProperties.isGZIPState, false))
     }
 
     def findState(session: ExternalContext.Session, documentUUID: String, isInitialState: Boolean): XFormsState = {
@@ -107,8 +106,8 @@ object EhcacheStateStore extends XFormsStateStore {
         }
     }
 
-    def getMaxSize() = stateCache.getCacheConfiguration.getMaxElementsInMemory
-    def getCurrentSize() = stateCache.getMemoryStoreSize.toInt
+    def getMaxSize = stateCache.getCacheConfiguration.getMaxElementsInMemory
+    def getCurrentSize = stateCache.getMemoryStoreSize.toInt
 
     def findStateCombined(staticStateDigest: String, dynamicStateUUID: String) = null
     def addStateCombined(staticStateDigest: String, dynamicStateUUID: String, xformsState: XFormsState, sessionId: String) = ()
@@ -116,7 +115,7 @@ object EhcacheStateStore extends XFormsStateStore {
     private def getDynamicStateKey(documentUUID: String, isInitialState: Boolean) =
         documentUUID + (if (isInitialState) "-I" else "-C") // key is different for initial vs. subsequent state
 
-    private def isDebugEnabled() = XFormsStateManager.getIndentedLogger.isDebugEnabled
+    private def isDebugEnabled = XFormsStateManager.getIndentedLogger.isDebugEnabled
 
     private def debug(message: String) =
         XFormsStateManager.getIndentedLogger.logDebug("", storeDebugName + " store: " + message)

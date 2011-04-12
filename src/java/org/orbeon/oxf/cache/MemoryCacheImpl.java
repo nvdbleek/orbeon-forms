@@ -15,12 +15,14 @@ package org.orbeon.oxf.cache;
 
 import org.apache.commons.collections.Transformer;
 import org.apache.commons.collections.iterators.TransformIterator;
+import org.orbeon.oxf.pipeline.api.PipelineContext;
 import org.orbeon.oxf.util.PropertyContext;
 
 import java.util.*;
+import java.util.concurrent.locks.Lock;
 
 /**
- * Very simple cache implementation.
+ * Memory cache implementation.
  *
  * @noinspection SimplifiableIfStatement
  */
@@ -67,29 +69,24 @@ public class MemoryCacheImpl implements Cache {
         public void incrementExpirationCount() { expirationCount++; }
     }
 
-    public synchronized void add(PropertyContext propertyContext, CacheKey key, Object validity, Object cacheable) {
+    public synchronized void add(CacheKey key, Object validity, Object cacheable) {
         if (key == null || validity == null || maxSize == 0) return;
-        final MemoryCacheStatistics statistics = (propertyContext != null) ? (MemoryCacheStatistics) getStatistics(propertyContext) : null;
+        final PropertyContext propertyContext = PipelineContext.get();
+        final MemoryCacheStatistics statistics = (propertyContext != null) ? (MemoryCacheStatistics) getStatistics() : null;
         if (statistics != null)
             statistics.incrementAddCount();
         CacheEntry entry = keyToEntryMap.get(key);
         if (entry == null) {
             // No existing entry found
             if (currentSize == maxSize) {
-                entry = (CacheEntry) linkedList.getLast();
-
-                // Notify object
-                notifyEvicted(propertyContext, entry.cacheable);
-
-                keyToEntryMap.remove(entry.key);
-                linkedList.removeLast();
-
-                if (statistics != null)
-                    statistics.incrementExpirationCount();
-            } else {
-                currentSize++;
-                entry = new CacheEntry();
+                // Cache is full, try to evict one entry, starting from the end
+                tryEvictLast();
+                // If somehow we couldn't manage to evict an entry (e.g. all were locked), the cache will grow over
+                // maxsize.
             }
+            currentSize++;
+
+            entry = new CacheEntry();
             entry.key = key;
             entry.validity = validity;
             entry.cacheable = cacheable;
@@ -97,7 +94,7 @@ public class MemoryCacheImpl implements Cache {
             entry.listEntry = linkedList.addFirst(entry);
 
             // Notify object
-            notifyAdded(propertyContext, entry.cacheable);
+            notifyAdded(entry.cacheable);
 
         } else {
             // Update validity and move to the front
@@ -108,52 +105,93 @@ public class MemoryCacheImpl implements Cache {
         }
     }
 
-    public synchronized void remove(PropertyContext propertyContext, CacheKey key) {
-        remove(propertyContext, key, false); // don't consider this an eviction
+    private boolean tryEvictLast() {
+        for (final Iterator<CacheEntry> i = linkedList.reverseIterator(); i.hasNext();) {
+            final CacheEntry entryToTry = i.next();
+            if (tryEvict(entryToTry)) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    private synchronized void remove(PropertyContext propertyContext, CacheKey key, boolean isEvict) {
+    private boolean tryEvict(CacheEntry entry) {
+
+        assert keyToEntryMap.containsKey(entry.key);
+
+        // Obtain lock if possible
+        final Lock lock;
+        final boolean canEvict;
+        if (entry.cacheable instanceof Cacheable) {
+            lock = ((Cacheable) entry.cacheable).getEvictionLock();
+            canEvict = lock == null || lock.tryLock();
+        } else {
+            lock = null;
+            canEvict = true;
+        }
+
+        // Only remove object if we are allowed to
+        if (canEvict) {
+            try {
+                remove(entry.key, true, false);
+            } finally {
+                // Release lock if we got one
+                if (lock != null)
+                    lock.unlock();
+            }
+        }
+
+        return canEvict;
+    }
+
+    public synchronized void remove(CacheKey key) {
+        remove(key, false, true); // don't consider this an eviction
+    }
+
+    private synchronized void remove(CacheKey key, boolean isEvict, boolean isRemove) {
         final CacheEntry entry = keyToEntryMap.get(key);
         if (entry != null) {
-
-            if (isEvict) {
-                // Notify object
-                notifyEvicted(propertyContext, entry.cacheable);
-            } else {
-                // Notify object
-                notifyRemoved(propertyContext, entry.cacheable);
-            }
-
             keyToEntryMap.remove(key);
             linkedList.remove(entry.listEntry);
             currentSize--;
+
+            // Notify object
+            if (isEvict) {
+                notifyEvicted(entry.cacheable);
+            } else if (isRemove) {
+                notifyRemoved(entry.cacheable);
+            }
         }
     }
 
-    private void notifyAdded(PropertyContext propertyContext, Object object) {
+    private void notifyAdded(Object object) {
         if (object instanceof Cacheable) {
-            ((Cacheable) object).added(propertyContext);
+            ((Cacheable) object).added();
         }
     }
 
-    private void notifyRemoved(PropertyContext propertyContext, Object object) {
+    private void notifyRemoved(Object object) {
         if (object instanceof Cacheable) {
-            ((Cacheable) object).removed(propertyContext);
+            ((Cacheable) object).removed();
         }
     }
 
-    private void notifyEvicted(PropertyContext propertyContext, Object object) {
+    private void notifyEvicted(Object object) {
         if (object instanceof Cacheable) {
-            ((Cacheable) object).evicted(propertyContext);
+            ((Cacheable) object).evicted();
         }
+        final PropertyContext propertyContext = PipelineContext.get();
+        final MemoryCacheStatistics statistics = (propertyContext != null) ? (MemoryCacheStatistics) getStatistics() : null;
+        if (statistics != null)
+            statistics.incrementExpirationCount();
     }
 
-    public synchronized int removeAll(PropertyContext propertyContext) {
+    public synchronized int removeAll() {
         final int previousSize = currentSize;
 
         // Notify objects
-        for (final Iterator i = iterateCacheObjects(propertyContext); i.hasNext();) {
-            notifyEvicted(propertyContext, i.next());
+        for (final Iterator i = iterateCacheObjects(); i.hasNext();) {
+            notifyRemoved(i.next());
         }
 
         keyToEntryMap = new HashMap<CacheKey, CacheEntry>();
@@ -162,27 +200,43 @@ public class MemoryCacheImpl implements Cache {
         return previousSize;
     }
 
-    public synchronized Object findValid(PropertyContext propertyContext, CacheKey key, Object validity) {
+    // Find valid entry and move it to the first position
+    public Object findValid(CacheKey key, Object validity) {
+        return getValid(key,  validity, false);
+    }
 
+    // Like findValid but remove from the cache (with removed() notification)
+    public Object takeValid(CacheKey key, Object validity) {
+        return getValid(key,  validity, true);
+    }
+
+    private synchronized Object getValid(CacheKey key, Object validity, boolean remove) {
+        final PropertyContext propertyContext = PipelineContext.get();
         final CacheEntry entry = keyToEntryMap.get(key);
         if (entry != null && lowerOrEqual(validity, entry.validity)) {
-            // Place in first position and return
+
             if (propertyContext != null)
-                ((MemoryCacheStatistics) getStatistics(propertyContext)).incrementHitsCount();
-            if (linkedList.getFirst() != entry) {
+                ((MemoryCacheStatistics) getStatistics()).incrementHitsCount();
+
+            if (remove) {
+                // Remove and notify
+                remove(key, false, true);
+            } else if (linkedList.getFirst() != entry) {
+                // Place in first position and return
                 linkedList.remove(entry.listEntry);
                 entry.listEntry = linkedList.addFirst(entry);
             }
+
             return entry.cacheable;
         } else {
             // Not latest validity
             if (propertyContext != null)
-                ((MemoryCacheStatistics) getStatistics(propertyContext)).incrementMissCount();
+                ((MemoryCacheStatistics) getStatistics()).incrementMissCount();
             return null;
         }
     }
 
-    public CacheEntry findAny(PropertyContext propertyContext, CacheKey key) {
+    public CacheEntry findAny(CacheKey key) {
         // Don't update statistics here
         return keyToEntryMap.get(key);
     }
@@ -195,28 +249,40 @@ public class MemoryCacheImpl implements Cache {
         return maxSize;
     }
 
-    public synchronized void setMaxSize(PropertyContext propertyContext, int maxSize) {
+    public synchronized void setMaxSize(int maxSize) {
         if (maxSize != this.maxSize) {
             // Decrease size if necessary
-            while(currentSize > maxSize)
-                remove(propertyContext, ((CacheEntry) linkedList.getLast()).key, true);
+
+            // Try to evict entries, but don't try more times than the number of elements initially in the cache
+            int tryCount = 0;
+            final int maxTries = currentSize;
+            while(currentSize > maxSize && tryCount < maxTries) {
+                tryEvictLast();
+                tryCount++;
+            }
+
             this.maxSize = maxSize;
         }
     }
 
-    public Iterator iterateCacheKeys(PropertyContext propertyContext) {
-        return keyToEntryMap.keySet().iterator();
-    }
-
-    public Iterator iterateCacheObjects(PropertyContext propertyContext) {
-        return new TransformIterator(keyToEntryMap.keySet().iterator(), new Transformer() {
+    public Iterator<CacheKey> iterateCacheKeys() {
+        return new TransformIterator(linkedList.iterator(), new Transformer() {
             public Object transform(Object o) {
-                return (keyToEntryMap.get(o)).cacheable;
+                return ((CacheEntry) o).key;
             }
         });
     }
 
-    public synchronized CacheStatistics getStatistics(PropertyContext propertyContext) {
+    public Iterator<Object> iterateCacheObjects() {
+        return new TransformIterator(linkedList.iterator(), new Transformer() {
+            public Object transform(Object o) {
+                return ((CacheEntry) o).cacheable;
+            }
+        });
+    }
+
+    public synchronized CacheStatistics getStatistics() {
+        final PropertyContext propertyContext = PipelineContext.get();
         MemoryCacheStatistics statistics = (MemoryCacheStatistics) propertyContext.getAttribute(statisticsContextKey);
         if (statistics == null) {
             statistics = new MemoryCacheStatistics();

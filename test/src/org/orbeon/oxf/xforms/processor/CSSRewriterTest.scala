@@ -16,19 +16,19 @@ package org.orbeon.oxf.xforms.processor
 
 import org.orbeon.oxf.test.ResourceManagerTestBase
 import org.scalatest.junit.AssertionsForJUnit
-import org.junit.{Before, Test}
 import org.orbeon.oxf.util.NetUtils
 import org.orbeon.oxf.pipeline.api.ExternalContext.Response
+import org.junit._
 
 class CSSRewriterTest extends ResourceManagerTestBase with AssertionsForJUnit {
 
     var response: Response = _
 
-    @Before def setup = {
-        response = NetUtils.getExternalContext(createPipelineContextWithExternalContext).getResponse
+    @Before def setup() {
+        response = NetUtils.getExternalContext.getResponse
     }
 
-    @Test def testURLs {
+    @Test def testURLs() {
 
         // Relative and absolute paths
         assert("""div { background-image: url(/orbeon/styles/a.png) }""" === rewriteCSS("""div { background-image: url(a.png) }"""))
@@ -45,7 +45,7 @@ class CSSRewriterTest extends ResourceManagerTestBase with AssertionsForJUnit {
         assert(rewritten === rewriteCSS("""div { background-image: url('a.png') }"""))
     }
 
-    @Test def testNamespaces {
+    @Test def testNamespaces() {
         // Multiple id rewrites
         assert("""div #_ns_foo.bar div #_ns_gaga.toto div {}""" === rewriteCSS("""div #foo.bar div #gaga.toto div {}"""))
 
@@ -53,7 +53,7 @@ class CSSRewriterTest extends ResourceManagerTestBase with AssertionsForJUnit {
         assert("""#_ns_foo.bar {} #_ns_gaga.toto {}""" === rewriteCSS("""#foo.bar {} #gaga.toto {}"""))
     }
 
-    @Test def testBoth {
+    @Test def testBoth() {
         assert("div #_ns_foo.bar { background-image: url(/orbeon/styles/a.png) }" ===
             rewriteCSS("""div #foo.bar { background-image: url(a.png) }"""))
     }

@@ -13,6 +13,8 @@
  */
 package org.orbeon.oxf.xforms.state;
 
+import org.dom4j.Document;
+import org.orbeon.oxf.pipeline.api.ExternalContext;
 import org.orbeon.oxf.pipeline.api.PipelineContext;
 import org.orbeon.oxf.util.PropertyContext;
 import org.orbeon.oxf.xforms.XFormsContainingDocument;
@@ -21,17 +23,27 @@ import org.orbeon.oxf.xforms.XFormsContainingDocument;
  * Represent the lifecycle of an XForms document from the point of view of state handling.
  */
 public interface XFormsStateLifecycle {
-    String getClientEncodedStaticState(PropertyContext propertyContext, XFormsContainingDocument containingDocument);
-    String getClientEncodedDynamicState(PropertyContext propertyContext, XFormsContainingDocument containingDocument);
-    void afterInitialResponse(PropertyContext propertyContext, XFormsContainingDocument containingDocument);
 
-    XFormsContainingDocument findOrRestoreDocument(PipelineContext pipelineContext, String uuid, String encodedClientStaticState,
-                                                   String encodedClientDynamicState, boolean isInitialState);
-    void beforeUpdateResponse(PropertyContext propertyContext, XFormsContainingDocument containingDocument, boolean ignoreSequence);
-    void afterUpdateResponse(PropertyContext propertyContext, XFormsContainingDocument containingDocument);
-    void onUpdateError(PropertyContext propertyContext, XFormsContainingDocument containingDocument);
+    interface RequestParameters {
+        String getUUID();
+        String getEncodedClientStaticState();
+        String getEncodedClientDynamicState();
+    }
 
-    void onAdd(PropertyContext propertyContext, XFormsContainingDocument containingDocument);
-    void onRemove(PropertyContext propertyContext, XFormsContainingDocument containingDocument);
-    void onEvict(PropertyContext propertyContext, XFormsContainingDocument containingDocument);
+    String getClientEncodedStaticState(XFormsContainingDocument containingDocument);
+    String getClientEncodedDynamicState(XFormsContainingDocument containingDocument);
+    void afterInitialResponse(XFormsContainingDocument containingDocument);
+
+    RequestParameters extractParameters(Document request, boolean isInitialState);
+
+    XFormsContainingDocument findOrRestoreDocument(RequestParameters parameters, boolean isInitialState);
+
+    XFormsContainingDocument beforeUpdate(RequestParameters parameters);
+    void beforeUpdateResponse(XFormsContainingDocument containingDocument, boolean ignoreSequence);
+    void afterUpdateResponse(XFormsContainingDocument containingDocument);
+    void afterUpdate(XFormsContainingDocument containingDocument, boolean keepDocument);
+
+    void onAddedToCache(String uuid);
+    void onRemovedFromCache(String uuid);
+    void onEvictedFromCache(XFormsContainingDocument containingDocument);
 }

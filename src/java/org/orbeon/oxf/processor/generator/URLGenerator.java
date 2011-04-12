@@ -837,11 +837,7 @@ public class URLGenerator extends ProcessorImpl {
 
             final XMLUtils.ParserConfiguration parserConfiguration = new XMLUtils.ParserConfiguration(config.getParserConfiguration(), uriReferences);
             try {
-<<<<<<< HEAD
-                final XMLReader reader = XMLUtils.newXMLReader(config.getParserConfiguration());
-=======
                 final XMLReader reader = XMLUtils.newXMLReader(parserConfiguration);
->>>>>>> orbeon/master
                 reader.setContentHandler(xmlReceiver);
                 // TODO: lexical handler?
                 final InputSource inputSource;

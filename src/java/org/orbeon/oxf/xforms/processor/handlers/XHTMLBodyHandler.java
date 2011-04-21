@@ -92,7 +92,7 @@ public class XHTMLBodyHandler extends XFormsBaseHandler {
         // Create xhtml:form element
         final boolean hasUpload = staticState.hasControlByName("upload");
         helper.startElement(htmlPrefix, XMLConstants.XHTML_NAMESPACE_URI, "form", new String[] {
-                // Add id so that things work in portals    
+                // Add id so that things work in portals
                 "id", XFormsUtils.getFormId(containingDocument),
                 // Regular classes
                 "class", "xforms-form" + (handlerContext.isNoScript() ? " xforms-noscript" : " xforms-initially-hidden")
@@ -137,7 +137,7 @@ public class XHTMLBodyHandler extends XFormsBaseHandler {
                     "type", "hidden", "name", "$server-events", "value", ""
             });
             helper.element(htmlPrefix, XMLConstants.XHTML_NAMESPACE_URI, "input", new String[]{
-                    "type", "hidden", "name", "$client-state", "value", ""
+                    "type", "text", "name", "$client-state", "value", "", "class", "xforms-initially-hidden"
             });
 
             // Store information about nested repeats hierarchy
@@ -203,12 +203,12 @@ public class XHTMLBodyHandler extends XFormsBaseHandler {
                 // HACK: We would be ok with just one template, but IE 6 doesn't allow setting the input/@type attribute properly
 
                 // xforms:select[@appearance = 'full'], xforms:input[@type = 'xs:boolean']
-                XFormsSelect1Handler.outputItemFullTemplate(pipelineContext, this, xmlReceiver, htmlPrefix, spanQName,
+                XFormsSelect1Handler.outputItemFullTemplate(this, xmlReceiver, htmlPrefix, spanQName,
                         containingDocument, reusableAttributes, attributes,
                         "xforms-select-full-template", TEMPLATE_ID, true, "checkbox");
 
                 // xforms:select1[@appearance = 'full']
-                XFormsSelect1Handler.outputItemFullTemplate(pipelineContext, this, xmlReceiver, htmlPrefix, spanQName,
+                XFormsSelect1Handler.outputItemFullTemplate(this, xmlReceiver, htmlPrefix, spanQName,
                         containingDocument, reusableAttributes, attributes,
                         "xforms-select1-full-template", TEMPLATE_ID, true, "radio");
             }

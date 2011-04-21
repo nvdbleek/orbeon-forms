@@ -16,13 +16,11 @@ package org.orbeon.oxf.xforms.processor.handlers;
 import org.apache.commons.lang.StringUtils;
 import org.dom4j.QName;
 import org.orbeon.oxf.common.ValidationException;
-import org.orbeon.oxf.pipeline.api.PipelineContext;
 import org.orbeon.oxf.pipeline.api.XMLReceiver;
 import org.orbeon.oxf.xforms.*;
 import org.orbeon.oxf.xforms.analysis.controls.LHHAAnalysis;
 import org.orbeon.oxf.xforms.control.*;
 import org.orbeon.oxf.xml.*;
-import org.orbeon.saxon.om.FastStringBuffer;
 import org.xml.sax.*;
 import org.xml.sax.helpers.AttributesImpl;
 
@@ -53,7 +51,6 @@ public abstract class XFormsBaseHandler extends ElementHandler {
 
     protected HandlerContext handlerContext;
 
-    protected PipelineContext pipelineContext;
     protected XFormsContainingDocument containingDocument;
 
     protected AttributesImpl reusableAttributes = new AttributesImpl();
@@ -66,7 +63,6 @@ public abstract class XFormsBaseHandler extends ElementHandler {
     public void setContext(Object context) {
         this.handlerContext = (HandlerContext) context;
 
-        this.pipelineContext = handlerContext.getPipelineContext();
         this.containingDocument = handlerContext.getContainingDocument();
 
         super.setContext(context);
@@ -383,18 +379,18 @@ public abstract class XFormsBaseHandler extends ElementHandler {
             // Get actual value from control
             if (isLabel) {
                 labelHintHelpAlertValue = control.getLabel();
-                mustOutputHTMLFragment = control.isHTMLLabel(pipelineContext);
+                mustOutputHTMLFragment = control.isHTMLLabel();
             } else if (isHelp) {
                 // NOTE: Special case here where we get the escaped help to facilitate work below. Help is a special
                 // case because it is stored as escaped HTML within a <label> element.
-                labelHintHelpAlertValue = control.getEscapedHelp(pipelineContext);
+                labelHintHelpAlertValue = control.getEscapedHelp();
                 mustOutputHTMLFragment = false;
             } else if (isHint) {
-                labelHintHelpAlertValue = control.getHint(pipelineContext);
-                mustOutputHTMLFragment = control.isHTMLHint(pipelineContext);
+                labelHintHelpAlertValue = control.getHint();
+                mustOutputHTMLFragment = control.isHTMLHint();
             } else if (isAlert) {
-                labelHintHelpAlertValue = control.getAlert(pipelineContext);
-                mustOutputHTMLFragment = control.isHTMLAlert(pipelineContext);
+                labelHintHelpAlertValue = control.getAlert();
+                mustOutputHTMLFragment = control.isHTMLAlert();
             } else {
                 throw new IllegalStateException("Illegal type requested");
             }
@@ -433,7 +429,7 @@ public abstract class XFormsBaseHandler extends ElementHandler {
         if (labelHintHelpAlertAttributes != null || isAlert) {
             // If no attributes were found, there is no such label / help / hint / alert
 
-            final FastStringBuffer classes = new FastStringBuffer(30);
+            final StringBuilder classes = new StringBuilder(30);
 
             // Put user classes first if any
             if (labelHintHelpAlertAttributes != null) {

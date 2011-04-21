@@ -21,7 +21,7 @@ import org.orbeon.oxf.xforms.xbl.XBLBindingsBase.Scope
 import org.orbeon.oxf.xforms._
 import analysis.{PartAnalysisImpl, Metadata}
 import control.{XFormsControl, XFormsControlFactory, XFormsComponentControl}
-import processor.handlers.XHTMLHeadHandler
+import processor.handlers.xhtml.XHTMLHeadHandler
 import org.orbeon.oxf.properties.PropertySet
 import org.apache.commons.lang.StringUtils
 import collection.JavaConversions._

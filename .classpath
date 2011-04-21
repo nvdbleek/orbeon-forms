@@ -117,5 +117,6 @@
 	<classpathentry kind="lib" path="lib/oracle/xdb.jar"/>
 	<classpathentry kind="lib" path="lib/oracle/xmlparserv2.jar"/>
 	<classpathentry kind="lib" path="lib/saxon-9-1-0-8_orbeon_20110215.jar"/>
+	<classpathentry kind="lib" path="lib/lifeary-portal-service-6.0.4.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

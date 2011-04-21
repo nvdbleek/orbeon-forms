@@ -118,5 +118,14 @@
 	<classpathentry kind="lib" path="lib/oracle/xmlparserv2.jar"/>
 	<classpathentry kind="lib" path="lib/saxon-9-1-0-8_orbeon_20110215.jar"/>
 	<classpathentry kind="lib" path="lib/lifeary-portal-service-6.0.4.jar"/>
+	<classpathentry kind="lib" path="lib/mockito-all-1.8.5.jar"/>
+	<classpathentry kind="lib" path="lib/mongo-2.5.3.jar"/>
+	<classpathentry kind="lib" path="lib/mongo-casbah-commons_2.8.1-2.1.2.jar"/>
+	<classpathentry kind="lib" path="lib/mongo-casbah-core_2.8.1-2.1.2.jar"/>
+	<classpathentry kind="lib" path="lib/mongo-casbah-gridfs_2.8.1-2.1.2.jar"/>
+	<classpathentry kind="lib" path="lib/mongo-casbah-query_2.8.1-2.1.2.jar"/>
+	<classpathentry kind="lib" path="lib/mongo-joda-time-1.6.2.jar"/>
+	<classpathentry kind="lib" path="lib/mongo-scalaj-collection_2.8.0-1.0.jar"/>
+	<classpathentry kind="lib" path="lib/mongo-time_2.8.1-0.3.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

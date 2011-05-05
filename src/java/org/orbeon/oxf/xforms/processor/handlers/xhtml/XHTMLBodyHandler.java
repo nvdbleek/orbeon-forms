@@ -32,7 +32,7 @@ import java.util.Map;
 /**
  * Handle xhtml:body.
  */
-public class XHTMLBodyHandler extends XFormsBaseHandler {
+public class XHTMLBodyHandler extends XFormsBaseHandlerXHTML {
 
     private ContentHandlerHelper helper;
 

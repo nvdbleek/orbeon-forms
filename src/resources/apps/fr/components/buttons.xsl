@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <!--
   Copyright (C) 2010 Orbeon, Inc.
 
@@ -80,18 +79,10 @@
             </xforms:label>
             <xforms:action ev:event="DOMActivate">
                 <xforms:setvalue ref="xxforms:instance('errors-state')/submitted">true</xforms:setvalue>
-                <xforms:action if="not(property('xxforms:noscript'))">
-                    <!-- Open confirmation dialog -->
-                    <xxforms:show dialog="fr-clear-confirm-dialog"/>
-                </xforms:action>
-                <xforms:action if="property('xxforms:noscript')">
-                    <!-- Restore directly -->
-                    <xforms:dispatch name="fr-clear" targetid="fr-persistence-model"/>
-                    <!-- Perform refresh (fr-clear sets RRR flags already) so that after that we can clear error summary -->
-                    <xforms:refresh/>
-                    <!-- Clear error summary -->
-                    <xforms:dispatch name="fr-unvisit-all" targetid="fr-error-summary-model"/>
-                </xforms:action>
+                <!-- Open confirmation dialog -->
+                <xxforms:show if="not(property('xxforms:noscript'))" dialog="fr-clear-confirm-dialog"/>
+                <!-- Restore directly -->
+                <xforms:dispatch if="property('xxforms:noscript')" name="fr-clear" targetid="fr-persistence-model"/>
             </xforms:action>
         </fr:button>
     </xsl:template>
@@ -140,13 +131,27 @@
     </xsl:template>
 
     <xsl:template match="fr:save-button">
+        <!-- Expose document id to JavaScript -->
+        <xforms:output id="fr-parameters-instance-document" ref="xxforms:instance('fr-parameters-instance')/document" style="display: none"/>
         <fr:button id="fr-save-button" xxforms:modal="true" model="fr-persistence-model" ref="instance('fr-triggers-instance')/save">
             <xforms:label>
                 <xhtml:img width="16" height="16" src="/apps/fr/style/images/silk/database_save.png" alt=""/>
-                <!--<xhtml:img width="16" height="16" src="/apps/fr/style/images/pixelmixer/save_16.png" alt=""/>-->
                 <xhtml:span><xforms:output value="$fr-resources/detail/labels/save-document"/></xhtml:span>
             </xforms:label>
         </fr:button>
+        <xxforms:variable name="mode-for-save" select="xxforms:instance('fr-parameters-instance')/mode/string()">
+            <!-- When the mode changes to "edit" after a save from /new -->
+            <xforms:action ev:event="xforms-value-changed" if="$mode-for-save = 'edit'">
+                <!-- If URI is /new (it should be), change it to /edit/id -->
+                <xxforms:script ev:event="DOMActivate">
+                    <!-- If browser supporting the HTML5 history API (http://goo.gl/Ootqu) -->
+                    if (history &amp;&amp; history.replaceState) {
+                        if (location.href.lastIndexOf("/new") == location.href.length - 4)
+                            history.replaceState(null, "", "edit/" + ORBEON.xforms.Document.getValue("fr-parameters-instance-document"));
+                    }
+                </xxforms:script>
+            </xforms:action>
+        </xxforms:variable>
     </xsl:template>
 
     <xsl:template match="fr:save-locally-button">
@@ -171,7 +176,6 @@
         <fr:button xxforms:modal="true" id="fr-workflow-review-button" model="fr-persistence-model" ref="instance('fr-triggers-instance')/workflow-review">
             <xforms:label>
                 <xhtml:img width="16" height="16" src="/apps/fr/style/images/pixelmixer/right_16.png" alt=""/>
-                <!--<xhtml:span>→ </xhtml:span>-->
                 <xhtml:span><xforms:output value="$fr-resources/detail/labels/workflow-review"/></xhtml:span>
             </xforms:label>
         </fr:button>
@@ -181,7 +185,6 @@
         <fr:button xxforms:modal="true" id="fr-workflow-edit-button" model="fr-persistence-model" ref="instance('fr-triggers-instance')/workflow-edit">
             <xforms:label>
                 <xhtml:img width="16" height="16" src="/apps/fr/style/images/pixelmixer/left_16.png" alt=""/>
-                <!--<xhtml:span>← </xhtml:span>-->
                 <xhtml:span><xforms:output value="$fr-resources/detail/labels/workflow-edit"/></xhtml:span>
             </xforms:label>
         </fr:button>
@@ -191,7 +194,6 @@
         <fr:button xxforms:modal="true" id="fr-workflow-send-button" model="fr-persistence-model" ref="instance('fr-triggers-instance')/workflow-send">
             <xforms:label>
                 <xhtml:img width="16" height="16" src="/apps/fr/style/images/pixelmixer/right_16.png" alt=""/>
-                <!--<xhtml:span>→ </xhtml:span>-->
                 <xhtml:span><xforms:output value="$fr-resources/detail/labels/workflow-send"/></xhtml:span>
             </xforms:label>
         </fr:button>

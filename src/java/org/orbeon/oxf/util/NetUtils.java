@@ -20,12 +20,13 @@ import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 import org.orbeon.oxf.common.OXFException;
-import org.orbeon.oxf.pipeline.StaticExternalContext;
 import org.orbeon.oxf.pipeline.api.ExternalContext;
 import org.orbeon.oxf.pipeline.api.PipelineContext;
+import org.orbeon.oxf.processor.generator.RequestGenerator;
 import org.orbeon.oxf.resources.URLFactory;
 import org.orbeon.oxf.xml.XMLReceiverAdapter;
 import org.orbeon.oxf.xml.XMLUtils;
+import org.orbeon.oxf.xml.dom4j.Dom4jUtils;
 
 import javax.servlet.http.HttpServletRequest;
 import java.io.*;
@@ -93,12 +94,12 @@ public class NetUtils {
      * header. If the request method was not "GET", or if no valid lastModified value was provided,
      * consider the document modified.
      */
-    public static boolean checkIfModifiedSince(HttpServletRequest request, long lastModified) {
+    public static boolean checkIfModifiedSince(ExternalContext.Request request, long lastModified) {
         // Do the check only for the GET method
         if (!"GET".equals(request.getMethod()) || lastModified <= 0)
             return true;
         // Check dates
-        String ifModifiedHeader = request.getHeader("If-Modified-Since");
+        final String ifModifiedHeader = StringConversions.getFirstValueFromStringArray(request.getHeaderValuesMap().get("if-modified-since"));
         if (logger.isDebugEnabled())
             logger.debug("Found If-Modified-Since header");
         if (ifModifiedHeader != null) {
@@ -624,6 +625,10 @@ public class NetUtils {
         }
     }
 
+    public static InputStream uriToInputStream(String uri) throws Exception {
+        return new URI(uri).toURL().openStream();
+    }
+
     /**
      * Convert a URI to a FileItem.
      *
@@ -720,7 +725,7 @@ public class NetUtils {
         } else if (scope == SESSION_SCOPE) {
             deleteFileOnSessionTermination(fileItem);
         } else if (scope == APPLICATION_SCOPE) {
-            deleteFileOnContextDestroyed(fileItem);
+            deleteFileOnApplicationDestroyed(fileItem);
         } else {
             throw new OXFException("Invalid context requested: " + scope);
         }
@@ -767,7 +772,7 @@ public class NetUtils {
      *
      * @param fileItem        FileItem
      */
-    public static void deleteFileOnContextDestroyed(final FileItem fileItem) {
+    public static void deleteFileOnApplicationDestroyed(final FileItem fileItem) {
         // Try to delete the file on exit and on session termination
         final ExternalContext externalContext = getExternalContext();
         ExternalContext.Application application = externalContext.getApplication();
@@ -960,7 +965,8 @@ public class NetUtils {
      * @return  external context if found, null otherwise
      */
     public static ExternalContext getExternalContext() {
-        return (ExternalContext) PipelineContext.get().getAttribute(PipelineContext.EXTERNAL_CONTEXT);
+        final PipelineContext pipelineContext = PipelineContext.get();
+        return (pipelineContext != null) ? (ExternalContext) pipelineContext.getAttribute(PipelineContext.EXTERNAL_CONTEXT) : null;
     }
 
     /**
@@ -1019,5 +1025,9 @@ public class NetUtils {
         } catch (Exception e) {
             throw new OXFException(e);
         }
+    }
+
+    public static void debugLogRequestAsXML(final ExternalContext.Request request) {
+        System.out.println(Dom4jUtils.domToPrettyString(RequestGenerator.readWholeRequestAsDOM4J(request, null)));
     }
 }

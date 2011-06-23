@@ -2082,16 +2082,12 @@ ORBEON.xforms.Controls = {
         if (lhhaElement != null) {
             lhhaElement.innerHTML = message;
             if (message == "") {
-                // Hide LHHA with empty content
-                // NOTE: This makes sense for help, but does it make sense for alert, label, and hint?
-                if (!YAHOO.util.Dom.hasClass(lhhaElement, "xforms-disabled"))
+                if (lhhaType == "help" && !YAHOO.util.Dom.hasClass(lhhaElement, "xforms-disabled")) {
+                    // Hide help with empty content
                     YAHOO.util.Dom.addClass(lhhaElement, "xforms-disabled-subsequent");
-                // If this is the help element, also disable help image
-                if (lhhaType == "help") {
+                    // If this is the help element, also disable help image
                     var helpImage = ORBEON.xforms.Controls._getControlLHHA(control, "help-image");
-                    if (!YAHOO.util.Dom.hasClass(helpImage, "xforms-disabled")) {
-                        YAHOO.util.Dom.addClass(helpImage, "xforms-disabled-subsequent");
-                    }
+                    YAHOO.util.Dom.addClass(helpImage, "xforms-disabled-subsequent");
                 }
             } else {
                 // We show LHHA with non-empty content, but ONLY if the control is relevant
@@ -2349,6 +2345,12 @@ ORBEON.xforms.Controls = {
         }
     },
 
+    isLHHA: function (element) {
+        var lhhaClasses = ["xforms-label", "xforms-help", "xforms-hint", "xforms-alert"];
+        return ORBEON.util.Dom.isElement(element) &&
+            _.any(lhhaClasses, function(clazz) { return YAHOO.util.Dom.hasClass(element, clazz); });
+    },
+
     getAlertMessage: function(control) {
         var alertElement = ORBEON.xforms.Controls._getControlLHHA(control, "alert");
         return alertElement.innerHTML;
@@ -2475,7 +2477,7 @@ ORBEON.xforms.Controls = {
                 var alertElement = ORBEON.xforms.Controls._getControlLHHA(control, "alert");
                 if (alertElement != null && YAHOO.util.Dom.hasClass(alertElement, "xforms-alert-active"))
                     YAHOO.util.Dom.addClass(alertElement, "xforms-alert-active-visited");
-            });
+            }, null, false);
         }
     },
 
@@ -2607,14 +2609,16 @@ ORBEON.xforms.Controls = {
                     // Create YUI dialog for help based on template
                     YAHOO.util.Dom.generateId(formChild);
                     YAHOO.util.Dom.removeClass(formChild, "xforms-initially-hidden");
+                    ORBEON.xforms.Globals.lastDialogZIndex += 2;
                     var helpPanel = new YAHOO.widget.Panel(formChild.id, {
-                        modal: false,
+                        modal: true,
                         fixedcenter: false,
                         underlay: "shadow",
                         visible: false,
                         constraintoviewport: true,
                         draggable: true,
-                        effect: {effect: YAHOO.widget.ContainerEffect.FADE, duration: 0.3}
+                        effect: {effect: YAHOO.widget.ContainerEffect.FADE, duration: 0.3},
+                        zIndex: ORBEON.xforms.Globals.lastDialogZIndex
                     });
                     helpPanel.render();
                     helpPanel.element.style.display = "none";
@@ -2669,7 +2673,8 @@ ORBEON.xforms.Controls = {
             ORBEON.xforms.Globals.formHelpPanel[form.id].element.style.display = "block";
             ORBEON.xforms.Globals.formHelpPanel[form.id].cfg.setProperty("context", [helpImage, "bl", "tl"]);
             ORBEON.xforms.Globals.formHelpPanel[form.id].show();
-            ORBEON.xforms.Globals.formHelpPanel[form.id].cfg.setProperty("zIndex", ORBEON.xforms.Globals.lastDialogZIndex++);
+            ORBEON.xforms.Globals.lastDialogZIndex += 2;
+            ORBEON.xforms.Globals.formHelpPanel[form.id].cfg.setProperty("zIndex", ORBEON.xforms.Globals.lastDialogZIndex);
         }
 
         // Set focus on close button if visible (we don't want to set the focus on the close button if not
@@ -3199,6 +3204,7 @@ ORBEON.xforms.Events = {
             if (YAHOO.util.Dom.hasClass(target, "xforms-incremental")) {
                 var event = new ORBEON.xforms.server.AjaxServer.Event(null, target.id, null, ORBEON.xforms.Controls.getCurrentValue(target), "xxforms-value-change-with-focus-change");
                 ORBEON.xforms.server.AjaxServer.fireEvents([event], true);
+                ORBEON.xforms.Controls.updateInvalidVisitedOnNextAjaxResponse(target);
             }
 
             // Resize wide text area
@@ -3433,17 +3439,16 @@ ORBEON.xforms.Events = {
             positions = positions.reverse();
 
             // Find value for this item
-            var currentLevel = ORBEON.xforms.Globals.menuItemsets[target.id];
-            var increment = 0;
+            var currentChildren = ORBEON.xforms.Globals.menuItemsets[target.id];
+            var nodeInfo = null;
             for (var positionIndex = 0; positionIndex < positions.length; positionIndex++) {
                 var position = positions[positionIndex];
-                currentLevel = currentLevel[position + increment];
-                increment = 3;
+                nodeInfo = currentChildren[position];
+                currentChildren = nodeInfo.children;
             }
 
             // Send value change to server
-            var itemValue = currentLevel[1];
-            var event = new ORBEON.xforms.server.AjaxServer.Event(null, target.id, null, itemValue, "xxforms-value-change-with-focus-change");
+            var event = new ORBEON.xforms.server.AjaxServer.Event(null, target.id, null, nodeInfo.value, "xxforms-value-change-with-focus-change");
             ORBEON.xforms.server.AjaxServer.fireEvents([event], false);
             // Close the menu
             ORBEON.xforms.Globals.menuYui[target.id].clearActiveItem();
@@ -3614,7 +3619,7 @@ ORBEON.xforms.Events = {
     treeClickFocus: function(control) {
         var isIncremental = YAHOO.util.Dom.hasClass(control, "xforms-incremental");
         if (ORBEON.xforms.Globals.currentFocusControlId != control.id) {// not sure we need to do this test here since focus() may do it anyway
-            // We are comming from another control, simulate a focus on this control
+            // We are coming from another control, simulate a focus on this control
             var focusEvent = { target: control };
             ORBEON.xforms.Events.focus(focusEvent);
         }
@@ -3799,10 +3804,10 @@ ORBEON.xforms.Events = {
         }
     },
 
-    runOnNext: function(event, listener,  obj, overideContext) {
+    runOnNext: function(event, listener,  obj, overrideContext) {
         function worker() {
             event.unsubscribe(worker);
-            if (overideContext) {
+            if (overrideContext) {
                 listener.call(obj);
             } else {
                 listener(obj);
@@ -3909,7 +3914,6 @@ ORBEON.xforms.XBL = {
 
     /**
      * To be documented on Wiki.
-     * TODO: cssClass isn't used anymore and should most likely be removed as a parameter and remove in every call to declareClass().
      */
     declareClass: function(xblClass, cssClass) {
         var doNothingSingleton = null;
@@ -3922,8 +3926,8 @@ ORBEON.xforms.XBL = {
             // Get the top-level element in the HTML DOM corresponding to this control
             var container = target == null || ! YAHOO.util.Dom.inDocument(target, document)
                 ? null
-                : (YAHOO.util.Dom.hasClass(target, "xbl-component") ? target
-                    : YAHOO.util.Dom.getAncestorByClassName(target, "xbl-component"));
+                : (YAHOO.util.Dom.hasClass(target, cssClass) ? target
+                    : YAHOO.util.Dom.getAncestorByClassName(target, cssClass));
 
             // The first time instance() is called for this class, override init() on the class object
             // to make sure that the init method is not called more than once
@@ -3954,7 +3958,7 @@ ORBEON.xforms.XBL = {
                 // that won't do anything when its methods are called
                 if (doNothingSingleton == null) {
                     doNothingSingleton = {};
-                    for (methodName in xblClass.prototype)
+                    for (var methodName in xblClass.prototype)
                         doNothingSingleton[methodName] = function(){};
                 }
                 return doNothingSingleton;
@@ -3985,7 +3989,7 @@ ORBEON.xforms.XBL = {
         partial = partial[component];                               if (partial == null) return;
         partial = partial.instance(this);                           if (partial == null) return;
         var method = partial["parameter" + property + "Changed"];   if (method == null) return;
-        partial.method();
+        method.call(partial);
     },
 
     componentInitialized: new YAHOO.util.CustomEvent(null, null, false, YAHOO.util.CustomEvent.FLAT)

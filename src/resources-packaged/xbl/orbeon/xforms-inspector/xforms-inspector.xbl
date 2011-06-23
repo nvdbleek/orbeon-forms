@@ -18,51 +18,37 @@
             xmlns:ev="http://www.w3.org/2001/xml-events"
             xmlns:xs="http://www.w3.org/2001/XMLSchema"
             xmlns:xbl="http://www.w3.org/ns/xbl"
+            xmlns:xxbl="http://orbeon.org/oxf/xml/xbl"
+            xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+            xmlns:saxon="http://saxon.sf.net/"
             xmlns:fr="http://orbeon.org/oxf/xml/form-runner">
 
     <xbl:binding element="fr|xforms-inspector" id="fr-xforms-inspector">
+        <xbl:handlers>
+            <xbl:handler event="fr-log" phase="target" defaultAction="cancel">
+                <xforms:action if="instance('inspector-instance')/function = 'view-console'">
+                    <xxforms:variable name="shown-output" select="instance('inspector-instance')/shown-output"/>
+                    <xxforms:variable name="xml-indent" select="instance('inspector-instance')/xsl:output"/>
+                    <!-- Add newline if we already have content shown -->
+                    <xforms:setvalue ref="$shown-output" value="concat(., if (. = '') then '' else '&#x0a;')"/>
+
+                    <xforms:action xxforms:iterate="event('fr-messages')">
+                        <xxforms:variable name="position" select="position()"/>
+                        <xxforms:variable name="current" select="."/>
+                        <xxforms:variable name="is-xml" select="$current instance of element()"/>
+                        <!-- Add a space between values -->
+                        <xforms:setvalue if="$position != 1" ref="$shown-output" value="concat(., ' ')"/>
+                        <xforms:setvalue ref="$shown-output" value="concat(., if ($is-xml) then
+                            if (instance('inspector-instance')/mode = 'formatted')
+                                then ../xpath-output/*/saxon:serialize($current, $xml-indent)
+                                else ../xpath-output/*/saxon:serialize($current, 'xml')
+                            else $current)"/>
+                    </xforms:action>
+                </xforms:action>
+            </xbl:handler>
+        </xbl:handlers>
         <xbl:resources>
-            <xbl:style>
-.fr-xforms-inspector {
-    display: block;
-    clear: both;
-    background-color:white;
-    border: 1px solid #333366;
-    margin: 1em;
-    padding: .5em;
-
-}
-
-.fr-xforms-inspector-source {
-    background-color: #eeeeee;
-    border: solid #336 1px;
-    padding: .5em;
-    line-height: 110%;
-    overflow: auto;
-    font-family: "Lucida Console", "Courier New", Courier, monospace;
-    font-size: 9pt;
-}
-
-.fr-xforms-inspector .xforms-label {
-    display: inline;
-    font-weight: bold;
-    font-style: italic;
-    margin-right: .5em
-}
-
-.fr-xforms-inspector td {
-    padding: .5em
-}
-
-.fr-xforms-inspector h2 {
-    margin: 0
-}
-
-.fr-xforms-inspector .xforms-mediatype-text-html { text-align: left }
-
-/* Override definition which might be added by Form Runner */
-.xbl-fr-xforms-inspector .xforms-select1-appearance-full span { display: inline }
-            </xbl:style>
+            <xbl:style src="/xbl/orbeon/xforms-inspector/xforms-inspector.css"/>
         </xbl:resources>
         <xbl:implementation>
             <!-- Local model -->
@@ -96,165 +82,174 @@
                         <current-model/>
                         <current-instance/>
                         <mode>formatted</mode>
-                        <function>view-instance</function>
+                        <function>view-instance</function>      <!-- view-instance | evaluate-xpath | view-console -->
                         <xpath>/*</xpath>
-                        <xml-output/>
-                        <html-output/>
+                        <xpath-output/>
+                        <input/>
+                        <shown-output/>
+                        <xsl:output method="xml" omit-xml-declaration="yes" indent="yes" saxon:indent-spaces="4"/>
                     </instance>
                 </xforms:instance>
 
+                <xxforms:variable name="xml-indent" select="instance('inspector-instance')/xsl:output"/>
                 <xforms:bind nodeset="instance('inspector-instance')">
-                    <xforms:bind nodeset="current-instance" readonly="false()"
-                                 calculate="if (. = '') then instance('inspector-itemset')
-                                 /model[@id = instance('inspector-instance')/current-model]/instance[1]/@id else ."/>
-                    <xforms:bind nodeset="xpath" readonly="../function != 'evaluate-xpath'"/>
+                    <xforms:bind ref="current-instance" readonly="false()" calculate="if (. = '') then instance('inspector-itemset') /model[@id = instance('inspector-instance')/current-model]/instance[1]/@id else ."/>
+                    <xforms:bind ref="xpath" readonly="../function != 'evaluate-xpath'"/>
+                    <xforms:bind ref="input" readonly="../function != 'view-console'"/>
+                    <xforms:bind ref="shown-output" readonly="true()"/>
                 </xforms:bind>
             </xforms:model>
         </xbl:implementation>
         <xbl:template>
-            <!-- View -->
             <xforms:group id="inspector-group" model="inspector-model" class="fr-xforms-inspector">
-                <xhtml:h2>Orbeon Forms XForms Inspector</xhtml:h2>
-                <xforms:group>
-                    <xhtml:table>
-                        <xhtml:tr>
-                            <xhtml:td>
-                                <xforms:select1 ref="instance('inspector-instance')/function" appearance="full">
-                                    <xforms:item>
-                                        <xforms:label>View instance</xforms:label>
-                                        <xforms:value>view-instance</xforms:value>
-                                    </xforms:item>
-                                </xforms:select1>
-                            </xhtml:td>
-                            <xforms:group appearance="xxforms:internal">
-                                <xforms:dispatch ev:event="xforms-value-changed" name="DOMActivate" target="inspector-xpath"/>
-                                <xhtml:td>
-                                    <!-- Model section -->
-                                    <xforms:group ref=".[count(instance('inspector-itemset')/model) gt 1]">
-                                        <xforms:select1 ref="instance('inspector-instance')/current-model">
-                                            <xforms:label>Model: </xforms:label>
-                                            <xforms:itemset nodeset="instance('inspector-itemset')/model">
-                                                <xforms:label ref="@id"/>
-                                                <xforms:value ref="@id"/>
-                                            </xforms:itemset>
-                                            <xforms:action ev:event="xforms-value-changed">
-                                                <xforms:setvalue ref="instance('inspector-instance')/current-instance"/>
-                                            </xforms:action>
-                                        </xforms:select1>
-                                    </xforms:group>
-                                    <xforms:group ref=".[count(instance('inspector-itemset')/model) = 1]">
-                                        <xforms:output value="instance('inspector-instance')/current-model">
-                                            <xforms:label>Model: </xforms:label>
-                                        </xforms:output>
-                                    </xforms:group>
-                                </xhtml:td>
-                                <xhtml:td>
-                                    <!-- Instance selection -->
-                                    <xforms:group ref=".[count(instance('inspector-itemset')/model[@id = instance('inspector-instance')/current-model]/instance) gt 1]">
-                                        <xforms:select1 ref="instance('inspector-instance')/current-instance">
-                                            <xforms:label>Instance: </xforms:label>
-                                            <xforms:itemset nodeset="instance('inspector-itemset')/model[@id = instance('inspector-instance')/current-model]/instance">
-                                                <xforms:label ref="@id"/>
-                                                <xforms:value ref="@id"/>
-                                            </xforms:itemset>
-                                        </xforms:select1>
-                                    </xforms:group>
-                                    <xforms:group ref=".[count(instance('inspector-itemset')/model[@id = instance('inspector-instance')/current-model]/instance) = 1]">
-                                        <xforms:output value="instance('inspector-instance')/current-instance">
-                                            <xforms:label>Instance: </xforms:label>
-                                        </xforms:output>
-                                    </xforms:group>
-                                </xhtml:td>
-                            </xforms:group>
-                        </xhtml:tr>
-                        <xhtml:tr>
-                            <xhtml:td>
-                                <xforms:select1 ref="instance('inspector-instance')/function" appearance="full">
-                                    <xforms:item>
-                                        <xforms:label>Evaluate XPath</xforms:label>
-                                        <xforms:value>evaluate-xpath</xforms:value>
-                                    </xforms:item>
-                                    <xforms:setfocus ev:event="xforms-value-changed" if=". = 'evaluate-xpath'"
-                                            control="inspector-xpath"/>
-                                </xforms:select1>
-                            </xhtml:td>
-                            <xforms:group ref="instance('inspector-instance')/xpath" appearance="xxforms:internal">
-                                <xhtml:td>
-                                    <!-- XPath expression and trigger -->
-                                    <xforms:action ev:event="DOMActivate">
-                                        <xforms:delete nodeset="instance('inspector-instance')/xml-output/node()"/>
-                                        <xforms:insert if="instance('inspector-instance')/xpath != ''"
-                                                context="instance('inspector-instance')/xml-output"
-                                                origin="xxforms:instance(instance('inspector-instance')/current-instance, true())/
-                                                    saxon:evaluate(instance('inspector-instance')/xpath)"/>
-                                    </xforms:action>
-                                    <xforms:input ref="." id="inspector-xpath">
-                                        <xforms:label>XPath expression: </xforms:label>
-                                    </xforms:input>
-                                </xhtml:td>
-                                <xhtml:td>
-                                    <xforms:trigger ref=".">
-                                        <xforms:label>Run XPath</xforms:label>
-                                        <xforms:help>
-                                            <xhtml:ul>
-                                                <xhtml:li>
-                                                    To trigger the evaluation of your expression, either press on the "Run
-                                                    XPath" button or just enter in the text field.
-                                                </xhtml:li>
-                                                <xhtml:li>
-                                                    Your XPath expression is evaluated on the currently selected instance.
-                                                </xhtml:li>
-                                            </xhtml:ul>
-                                        </xforms:help>
-                                    </xforms:trigger>
-                                </xhtml:td>
-                            </xforms:group>
-                        </xhtml:tr>
-                        <xhtml:tr>
-                            <xhtml:td/>
-                            <xhtml:td>
-                                <!-- Mode for formatting -->
-                                <xforms:select1 appearance="full" ref="instance('inspector-instance')/mode">
-                                    <xforms:label>Mode: </xforms:label>
-                                    <xforms:item>
-                                        <xforms:label>Formatted</xforms:label>
-                                        <xforms:value>formatted</xforms:value>
-                                    </xforms:item>
-                                    <xforms:item>
-                                        <xforms:label>Plain</xforms:label>
-                                        <xforms:value>plain</xforms:value>
-                                    </xforms:item>
-                                </xforms:select1>
-                            </xhtml:td>
-                        </xhtml:tr>
-                    </xhtml:table>
-                </xforms:group>
-                <xhtml:div class="fr-xforms-inspector-source" id="fr-xforms-inspector">
-                    <xforms:group ref="instance('inspector-instance')">
-                        <xforms:group ref="if (function = 'evaluate-xpath') then xml-output else
-                                xxforms:instance(instance('inspector-instance')/current-instance, true())">
+                <xhtml:div class="fr-xforms-inspector-title">Orbeon Forms XForms Inspector</xhtml:div>
 
-                            <!-- Display atomic value -->
-                            <xforms:group ref=".[not(self::*)]">
-                                <xforms:output value="."/>
-                            </xforms:group>
-                            <!-- Display element -->
-                            <xforms:group ref=".[self::*]">
-                                <xforms:group ref=".[instance('inspector-instance')/mode = 'formatted']">
-                                    <xforms:output mediatype="text/html"
-                                            value="xxforms:serialize(xxforms:call-xpl(
-                                                    concat('oxf:/ops/utils/formatting/format',
-                                                    if (instance('inspector-instance')/function = 'evaluate-xpath') then '-multiple' else '',
-                                                    '.xpl'), 'data', ., 'data')/*, 'html')"/>
-                                </xforms:group>
-                                <xforms:group ref=".[instance('inspector-instance')/mode = 'plain']">
-                                    <xforms:output mediatype="text/html"
-                                                   value="replace(replace(replace(replace(xxforms:serialize(., 'xml'),
-                                                   '&amp;', '&amp;amp;'), '&lt;', '&amp;lt;'), '&#x0a;', '&lt;br>'), ' ', '&#160;')"/>
-                                </xforms:group>
-                            </xforms:group>
+                <xforms:group xxbl:scope="outer" appearance="xxforms:internal">
+                    <!-- Do this within a group otherwise listening to #document doesn't work -->
+                    <!-- Catch error in action handler and do not let propagation occur -->
+                    <xforms:action ev:event="xxforms-action-error" ev:observer="#document" ev:propagate="stop">
+                        <xforms:dispatch name="fr-log" targetid="fr-xforms-inspector" xxbl:scope="inner">
+                            <xxforms:context name="fr-messages" value="concat('Error: ', normalize-space(event('message')))"/>
+                        </xforms:dispatch>
+                        <xforms:dispatch name="fr-log" targetid="fr-xforms-inspector" xxbl:scope="inner">
+                            <xxforms:context name="fr-messages" value="event('element')"/>
+                        </xforms:dispatch>
+                    </xforms:action>
+                </xforms:group>
+
+                <!-- Function selection-->
+                <xhtml:div class="fr-xforms-inspector-block">
+                    <xforms:select1 ref="instance('inspector-instance')/function" appearance="full">
+                        <xforms:action ev:event="xforms-value-changed">
+                            <xforms:setvalue  if=". = 'view-console'" ref="instance('inspector-instance')/shown-output"/>
+                        </xforms:action>
+                        <xforms:label>Mode: </xforms:label>
+                        <xforms:item>
+                            <xforms:label>View instance</xforms:label>
+                            <xforms:value>view-instance</xforms:value>
+                        </xforms:item>
+                        <xforms:item>
+                            <xforms:label>Evaluate XPath</xforms:label>
+                            <xforms:value>evaluate-xpath</xforms:value>
+                        </xforms:item>
+                        <xforms:item>
+                            <xforms:label>View Console</xforms:label>
+                            <xforms:value>view-console</xforms:value>
+                        </xforms:item>
+                    </xforms:select1>
+                </xhtml:div>
+
+                <!-- Model / instance -->
+                <xhtml:div class="fr-xforms-inspector-block fr-xforms-inspector-{if (instance('inspector-instance')/function = ('view-instance', 'evaluate-xpath')) then 'enabled' else 'disabled'}-function">
+                    <xforms:group appearance="xxforms:internal">
+                        <xforms:dispatch ev:event="xforms-value-changed" name="DOMActivate" target="inspector-xpath"/>
+                        <!-- Model -->
+                        <xxforms:variable name="models" select="instance('inspector-itemset')/model"/>
+                        <xforms:group ref=".[count($models) gt 1]" class="fr-xforms-inspector-model">
+                            <xforms:select1 ref="instance('inspector-instance')/current-model" appearance="compact">
+                                <xforms:label>Model: </xforms:label>
+                                <xforms:itemset nodeset="$models">
+                                    <xforms:label ref="@id"/>
+                                    <xforms:value ref="@id"/>
+                                </xforms:itemset>
+                                <xforms:action ev:event="xforms-value-changed">
+                                    <xforms:setvalue ref="instance('inspector-instance')/current-instance"/>
+                                </xforms:action>
+                            </xforms:select1>
+                        </xforms:group>
+                        <xforms:group ref=".[count($models) = 1]" class="fr-xforms-inspector-model">
+                            <xforms:output value="instance('inspector-instance')/current-model">
+                                <xforms:label>Model: </xforms:label>
+                            </xforms:output>
+                        </xforms:group>
+                        <!-- Instance -->
+                        <xforms:group ref=".[count(instance('inspector-itemset')/model[@id = instance('inspector-instance')/current-model]/instance) gt 1]" class="fr-xforms-inspector-instance">
+                            <xforms:select1 ref="instance('inspector-instance')/current-instance" appearance="compact">
+                                <xforms:label>Instance: </xforms:label>
+                                <xforms:itemset nodeset="instance('inspector-itemset')/model[@id = instance('inspector-instance')/current-model]/instance">
+                                    <xforms:label ref="@id"/>
+                                    <xforms:value ref="@id"/>
+                                </xforms:itemset>
+                            </xforms:select1>
+                        </xforms:group>
+                        <xforms:group ref=".[count(instance('inspector-itemset')/model[@id = instance('inspector-instance')/current-model]/instance) = 1]" class="fr-xforms-inspector-instance">
+                            <xforms:output value="instance('inspector-instance')/current-instance">
+                                <xforms:label>Instance: </xforms:label>
+                            </xforms:output>
                         </xforms:group>
                     </xforms:group>
+                </xhtml:div>
+
+                <!-- Evaluate XPath -->
+                <xhtml:div class="fr-xforms-inspector-block fr-xforms-inspector-{if (instance('inspector-instance')/function = 'evaluate-xpath') then 'enabled' else 'disabled'}-function">
+                    <xforms:group ref="instance('inspector-instance')/xpath" appearance="xxforms:internal">
+                        <!-- XPath expression and trigger -->
+                        <xforms:action ev:event="DOMActivate">
+                            <xforms:delete nodeset="instance('inspector-instance')/xpath-output/node()"/>
+                            <xforms:insert if="instance('inspector-instance')/xpath != ''"
+                                    context="instance('inspector-instance')/xpath-output"
+                                    origin="xxforms:instance(instance('inspector-instance')/current-instance, true())/
+                                        saxon:evaluate(instance('inspector-instance')/xpath)"/>
+                        </xforms:action>
+                        <xforms:input ref="." id="inspector-xpath">
+                            <xforms:label>XPath: </xforms:label>
+                        </xforms:input>
+                        <fr:button ref=".">
+                            <xforms:label>Evaluate</xforms:label>
+                        </fr:button>
+                    </xforms:group>
+                </xhtml:div>
+
+                <!-- Input, only shown if user has an instance 'fr-xforms-inspector-input' -->
+                <xxforms:variable name="external-input"><xxforms:sequence select="xxforms:instance('fr-xforms-inspector-input')" xxbl:scope="outer"/></xxforms:variable>
+                <xxforms:variable name="internal-input" select="instance('inspector-instance')/input"/>
+                <xforms:group ref=".[exists($external-input)]">
+                    <xhtml:div class="fr-xforms-inspector-block fr-xforms-inspector-{if (instance('inspector-instance')/function = 'view-console') then 'enabled' else 'disabled'}-function">
+                        <xforms:input ref="$internal-input" incremental="true">
+                            <xforms:setvalue ev:event="xforms-value-changed" ref="$external-input" value="$internal-input"/>
+                            <xforms:label>Input:</xforms:label>
+                        </xforms:input>
+                    </xhtml:div>
+                </xforms:group>
+
+                <!-- Output -->
+                <xhtml:div class="fr-xforms-inspector-source" id="fr-xforms-inspector">
+                    <xforms:group ref="instance('inspector-instance')" appearance="xxforms:internal">
+                        <!-- NOTE: We can't use a calculate for this, as it would only be execute if something in the current model changes -->
+                        <xxforms:variable name="current-instance" select="xxforms:instance(current-instance, true())"/>
+                        <xxforms:variable name="shown-output" select="
+                                if (function = 'view-instance') then
+                                    if (mode = 'formatted')
+                                        then saxon:serialize($current-instance, $xml-indent)
+                                        else saxon:serialize($current-instance, 'xml')
+                                else if (function = 'evaluate-xpath') then
+                                    if (exists(xpath-output/*))
+                                        then string-join(
+                                            if (mode = 'formatted')
+                                                then xpath-output/*/saxon:serialize(., $xml-indent)
+                                                else xpath-output/*/saxon:serialize(., 'xml')
+                                            , '&#x0a;')
+                                        else xpath-output
+                                else shown-output">
+                            <xforms:setvalue ev:event="xforms-enabled xforms-value-changed" ref="shown-output" value="$shown-output"/>
+                        </xxforms:variable>
+                        <fr:code-mirror ref="shown-output"/>
+                    </xforms:group>
+                </xhtml:div>
+
+                <!-- Mode for formatting -->
+                <xhtml:div class="fr-xforms-inspector-mode">
+                    <xforms:select1 appearance="full" ref="instance('inspector-instance')/mode">
+                        <xforms:label>Output: </xforms:label>
+                        <xforms:item>
+                            <xforms:label>Pretty</xforms:label>
+                            <xforms:value>formatted</xforms:value>
+                        </xforms:item>
+                        <xforms:item>
+                            <xforms:label>Plain</xforms:label>
+                            <xforms:value>plain</xforms:value>
+                        </xforms:item>
+                    </xforms:select1>
                 </xhtml:div>
             </xforms:group>
         </xbl:template>

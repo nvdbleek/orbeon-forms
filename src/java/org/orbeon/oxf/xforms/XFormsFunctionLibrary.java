@@ -222,7 +222,7 @@ public class XFormsFunctionLibrary implements FunctionLibrary {
         StandardFunction.arg(e, 1, Type.ITEM_TYPE, StaticProperty.ALLOWS_ZERO_OR_MORE, null);
 
         // xxforms:get-remote-user()
-        e = register("{" + XFormsConstants.XXFORMS_NAMESPACE_URI + "}get-remote-user", XXFormsGetRemoteUser.class, 0, 0, 0, Type.ITEM_TYPE, StaticProperty.ALLOWS_ZERO);
+        e = register("{" + XFormsConstants.XXFORMS_NAMESPACE_URI + "}get-remote-user", XXFormsGetRemoteUser.class, 0, 0, 0, BuiltInAtomicType.STRING, StaticProperty.ALLOWS_ZERO_OR_ONE);
 
         // xxforms:is-user-in-role(xs:string) as xs:boolean
         e = register("{" + XFormsConstants.XXFORMS_NAMESPACE_URI + "}is-user-in-role", XXFormsIsUserInRole.class, 0, 1, 1, BuiltInAtomicType.BOOLEAN, StaticProperty.EXACTLY_ONE);
@@ -339,6 +339,15 @@ public class XFormsFunctionLibrary implements FunctionLibrary {
         e = register("{" + XFormsConstants.XXFORMS_NAMESPACE_URI  + "}list-instances", XXFormsListInstances.class, 0, 1, 1, BuiltInAtomicType.STRING, StaticProperty.ALLOWS_ZERO_OR_MORE);
         StandardFunction.arg(e, 0, BuiltInAtomicType.STRING, StaticProperty.EXACTLY_ONE, null);
 
+        // xxforms:list-variables
+        e = register("{" + XFormsConstants.XXFORMS_NAMESPACE_URI  + "}list-variables", XXFormsListVariables.class, 0, 1, 1, BuiltInAtomicType.STRING, StaticProperty.ALLOWS_ZERO_OR_MORE);
+        StandardFunction.arg(e, 0, BuiltInAtomicType.STRING, StaticProperty.EXACTLY_ONE, null);
+
+        // xxforms:get-variable
+        e = register("{" + XFormsConstants.XXFORMS_NAMESPACE_URI  + "}get-variable", XXFormsGetVariable.class, 0, 2, 2, Type.ITEM_TYPE, StaticProperty.ALLOWS_ZERO_OR_MORE);
+        StandardFunction.arg(e, 0, BuiltInAtomicType.STRING, StaticProperty.EXACTLY_ONE, null);
+        StandardFunction.arg(e, 1, BuiltInAtomicType.STRING, StaticProperty.EXACTLY_ONE, null);
+
         // xxforms:property
         e = register("{" + XFormsConstants.XXFORMS_NAMESPACE_URI + "}property", XXFormsProperty.class, 0, 1, 1, BuiltInAtomicType.ANY_ATOMIC, StaticProperty.ALLOWS_ZERO_OR_ONE);
         StandardFunction.arg(e, 0, BuiltInAtomicType.STRING, StaticProperty.EXACTLY_ONE, null);
@@ -401,6 +410,16 @@ public class XFormsFunctionLibrary implements FunctionLibrary {
         // xxforms:document
         e = register("{" + XFormsConstants.XXFORMS_NAMESPACE_URI + "}create-document", XXFormsCreateDocument.class, 0, 0, 0, Type.NODE_TYPE, StaticProperty.EXACTLY_ONE);
 
+        // xxforms:label, xxforms:help, xxforms:hint, xxforms:alert
+        e = register("{" + XFormsConstants.XXFORMS_NAMESPACE_URI + "}label", XXFormsLHHA.class, 0, 1, 1, BuiltInAtomicType.STRING, StaticProperty.ALLOWS_ZERO_OR_ONE);
+        StandardFunction.arg(e, 0, BuiltInAtomicType.STRING, StaticProperty.EXACTLY_ONE, null);
+        e = register("{" + XFormsConstants.XXFORMS_NAMESPACE_URI + "}help", XXFormsLHHA.class, 1, 1, 1, BuiltInAtomicType.STRING, StaticProperty.ALLOWS_ZERO_OR_ONE);
+        StandardFunction.arg(e, 0, BuiltInAtomicType.STRING, StaticProperty.EXACTLY_ONE, null);
+        e = register("{" + XFormsConstants.XXFORMS_NAMESPACE_URI + "}hint", XXFormsLHHA.class, 2, 1, 1, BuiltInAtomicType.STRING, StaticProperty.ALLOWS_ZERO_OR_ONE);
+        StandardFunction.arg(e, 0, BuiltInAtomicType.STRING, StaticProperty.EXACTLY_ONE, null);
+        e = register("{" + XFormsConstants.XXFORMS_NAMESPACE_URI + "}alert", XXFormsLHHA.class, 3, 1, 1, BuiltInAtomicType.STRING, StaticProperty.ALLOWS_ZERO_OR_ONE);
+        StandardFunction.arg(e, 0, BuiltInAtomicType.STRING, StaticProperty.EXACTLY_ONE, null);
+
         // === Functions in the xforms namespace
 
         // xforms:if()
@@ -410,7 +429,7 @@ public class XFormsFunctionLibrary implements FunctionLibrary {
         StandardFunction.arg(e, 2, BuiltInAtomicType.STRING, StaticProperty.EXACTLY_ONE, null);
 
         // xforms:seconds-from-dateTime(), which is incompatible with the XPath 2.0 version
-        e = register("{" + XFormsConstants.XFORMS_NAMESPACE_URI  + "}seconds-from-dateTime", SecondsFromDateTime.class, 0, 1, 1, BuiltInAtomicType.INTEGER, StaticProperty.EXACTLY_ONE);
+        e = register("{" + XFormsConstants.XFORMS_NAMESPACE_URI  + "}seconds-from-dateTime", SecondsFromDateTime.class, 0, 1, 1, BuiltInAtomicType.DECIMAL, StaticProperty.EXACTLY_ONE);
         StandardFunction.arg(e, 0, BuiltInAtomicType.STRING, StaticProperty.EXACTLY_ONE, null);
 
         // === XSLT 2.0 function
@@ -467,7 +486,7 @@ public class XFormsFunctionLibrary implements FunctionLibrary {
         StandardFunction.Entry entry;
         if (uri.equals(NamespaceConstant.FN)) {
             entry = functionTable.get(local);
-        } else if (uri.equals(XFormsConstants.XXFORMS_NAMESPACE_URI) || uri.equals(XFormsConstants.EXFORMS_NAMESPACE_URI)) {
+        } else if (uri.equals(XFormsConstants.XXFORMS_NAMESPACE_URI) || uri.equals(XFormsConstants.EXFORMS_NAMESPACE_URI) || uri.equals(XFormsConstants.XFORMS_NAMESPACE_URI)) {
             entry = functionTable.get("{" + uri + "}" + local);
         } else {
             return null;

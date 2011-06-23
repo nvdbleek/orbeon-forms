@@ -13,20 +13,32 @@
  */
 package org.orbeon.oxf.resources.handler;
 
-import org.apache.http.*;
+import org.apache.http.Header;
+import org.apache.http.HttpEntityEnclosingRequest;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpResponse;
 import org.apache.http.auth.*;
 import org.apache.http.client.CookieStore;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.methods.*;
 import org.apache.http.client.protocol.ClientContext;
 import org.apache.http.conn.ClientConnectionManager;
-import org.apache.http.conn.params.*;
-import org.apache.http.conn.scheme.*;
+import org.apache.http.conn.params.ConnManagerParams;
+import org.apache.http.conn.params.ConnPerRouteBean;
+import org.apache.http.conn.params.ConnRoutePNames;
+import org.apache.http.conn.scheme.PlainSocketFactory;
+import org.apache.http.conn.scheme.Scheme;
+import org.apache.http.conn.scheme.SchemeRegistry;
 import org.apache.http.conn.ssl.SSLSocketFactory;
+import org.apache.http.conn.ssl.X509HostnameVerifier;
 import org.apache.http.entity.ByteArrayEntity;
-import org.apache.http.impl.client.*;
+import org.apache.http.impl.client.BasicCookieStore;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager;
-import org.apache.http.params.*;
+import org.apache.http.params.BasicHttpParams;
+import org.apache.http.params.HttpConnectionParamBean;
+import org.apache.http.params.HttpParams;
 import org.apache.http.protocol.BasicHttpContext;
 import org.apache.http.protocol.HttpContext;
 import org.orbeon.oxf.common.OXFException;
@@ -35,10 +47,16 @@ import org.orbeon.oxf.properties.PropertySet;
 import org.orbeon.oxf.util.Connection;
 import org.orbeon.oxf.util.StringConversions;
 
+import javax.net.ssl.SSLContext;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.ProtocolException;
-import java.net.*;
+import java.net.URL;
+import java.net.URLConnection;
+import java.net.URLDecoder;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
 public class HTTPURLConnection extends URLConnection {
@@ -47,6 +65,8 @@ public class HTTPURLConnection extends URLConnection {
     public static String SO_TIMEOUT_PROPERTY = "oxf.http.so-timeout";
     public static String PROXY_HOST_PROPERTY = "oxf.http.proxy.host";
     public static String PROXY_PORT_PROPERTY = "oxf.http.proxy.port";
+    public static String SSL_HOSTNAME_VERIFIER = "oxf.http.ssl.hostname-verifier";
+    public static String PROXY_SSL_PROPERTY = "oxf.http.proxy.use-ssl";
 	public static String PROXY_USERNAME_PROPERTY = "oxf.http.proxy.username";
 	public static String PROXY_PASSWORD_PROPERTY = "oxf.http.proxy.password";
 	public static String PROXY_NTLM_HOST_PROPERTY = "oxf.http.proxy.ntlm.host";
@@ -57,6 +77,7 @@ public class HTTPURLConnection extends URLConnection {
     private static HttpParams httpParams;
     private static PreemptiveAuthHttpRequestInterceptor preemptiveAuthHttpRequestInterceptor = new PreemptiveAuthHttpRequestInterceptor();
     private static AuthState proxyAuthState = null;
+
     static {
         final BasicHttpParams basicHttpParams = new BasicHttpParams();
         // Remove limit on the number of connections per host
@@ -70,17 +91,27 @@ public class HTTPURLConnection extends URLConnection {
         paramBean.setStaleCheckingEnabled(propertySet.getBoolean(STALE_CHECKING_ENABLED_PROPERTY, true));
         paramBean.setSocketBufferSize(propertySet.getInteger(SO_TIMEOUT_PROPERTY, 0));
 
+        // Create SSL hostname verifier
+        String hostnameVerifierProperty = propertySet.getString(SSL_HOSTNAME_VERIFIER, "strict");
+        X509HostnameVerifier hostnameVerifier =
+                  "browser-compatible".equals(hostnameVerifierProperty) ? SSLSocketFactory.BROWSER_COMPATIBLE_HOSTNAME_VERIFIER
+                : "allow-all".equals(hostnameVerifierProperty) ? SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER
+                : SSLSocketFactory.STRICT_HOSTNAME_VERIFIER;
+
         // Declare schemes (though having to declare common schemes like HTTP and HTTPS seems wasteful)
         final SchemeRegistry schemeRegistry = new SchemeRegistry();
         schemeRegistry.register(new Scheme("http", PlainSocketFactory.getSocketFactory(), 80));
-        schemeRegistry.register(new Scheme("https", SSLSocketFactory.getSocketFactory(), 443));
+        SSLSocketFactory sslSocketFactory = SSLSocketFactory.getSocketFactory();
+        sslSocketFactory.setHostnameVerifier(hostnameVerifier);
+        schemeRegistry.register(new Scheme("https", sslSocketFactory, 443));
         connectionManager = new ThreadSafeClientConnManager(basicHttpParams, schemeRegistry);
 
         // Set proxy if defined in properties
         final String proxyHost = Properties.instance().getPropertySet().getString(PROXY_HOST_PROPERTY);
         final Integer proxyPort = Properties.instance().getPropertySet().getInteger(PROXY_PORT_PROPERTY);
         if (proxyHost != null && proxyPort != null) {
-            basicHttpParams.setParameter(ConnRoutePNames.DEFAULT_PROXY, new HttpHost(proxyHost, proxyPort));
+            final boolean useTLS = Properties.instance().getPropertySet().getBoolean(PROXY_SSL_PROPERTY, false);
+            basicHttpParams.setParameter(ConnRoutePNames.DEFAULT_PROXY, new HttpHost(proxyHost, proxyPort, useTLS ? "https" : "http"));
 
             // Proxy authentication
             final String proxyUsername = Properties.instance().getPropertySet().getString(PROXY_USERNAME_PROPERTY);
@@ -206,13 +237,19 @@ public class HTTPURLConnection extends URLConnection {
             }
 
             // Create request entity with body
-            if (requestBody != null && method instanceof HttpEntityEnclosingRequest) {
-                final Header contentTypeHeader = method.getFirstHeader("Content-Type"); // Header names are case-insensitive for comparison
-                if (contentTypeHeader == null)
-                    throw new ProtocolException("Can't set request entity: Content-Type header is missing");
-                final ByteArrayEntity byteArrayEntity = new ByteArrayEntity(requestBody);
-                byteArrayEntity.setContentType(contentTypeHeader);
-                ((HttpEntityEnclosingRequest) method).setEntity(byteArrayEntity);
+            if (method instanceof HttpEntityEnclosingRequest) {
+
+                // Use the body that was set directly, or the result of writing to the OutputStream
+                final byte[] body = (requestBody != null) ? requestBody : (os != null) ? os.toByteArray() : null;
+
+                if (body != null) {
+                    final Header contentTypeHeader = method.getFirstHeader("Content-Type"); // Header names are case-insensitive for comparison
+                    if (contentTypeHeader == null)
+                        throw new ProtocolException("Can't set request entity: Content-Type header is missing");
+                    final ByteArrayEntity byteArrayEntity = new ByteArrayEntity(body);
+                    byteArrayEntity.setContentType(contentTypeHeader);
+                    ((HttpEntityEnclosingRequest) method).setEntity(byteArrayEntity);
+                }
             }
 
             // Make request
@@ -228,6 +265,16 @@ public class HTTPURLConnection extends URLConnection {
 
     public void setRequestBody(byte[] requestBody) throws IOException {
         this.requestBody = requestBody;
+    }
+
+    private ByteArrayOutputStream os = null;
+
+    @Override
+    public OutputStream getOutputStream() throws IOException {
+        if (os == null)
+            os = new ByteArrayOutputStream();
+
+        return os;
     }
 
     private void initResponseHeaders() {

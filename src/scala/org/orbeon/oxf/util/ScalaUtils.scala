@@ -20,18 +20,18 @@ object ScalaUtils {
     private val COPY_BUFFER_SIZE = 8192
 
     type Readable[T] = {
-        def close(): Unit
+        def close()
         def read(b: Array[T]): Int
     }
 
     type Writable[T] = {
-        def close(): Unit
-        def write(cbuf: Array[T], off: Int, len: Int): Unit
+        def close()
+        def write(cbuf: Array[T], off: Int, len: Int)
     }
 
     // Copy a stream, with optional progress callback
     // This fails at runtime due to: https://lampsvn.epfl.ch/trac/scala/ticket/2672
-    def genericCopyStream[T : ClassManifest](in: Readable[T], out: Writable[T], progress: (Long) => Unit = _ => ()) = {
+    def genericCopyStream[T : ClassManifest](in: Readable[T], out: Writable[T], progress: Long => Unit = _ => ()) = {
 
         require(in ne null)
         require(out ne null)
@@ -47,7 +47,7 @@ object ScalaUtils {
         }
     }
 
-    def copyStream(in: Readable[Byte], out: Writable[Byte], progress: (Long) => Unit = _ => ()) = {
+    def copyStream(in: Readable[Byte], out: Writable[Byte], progress: Long => Unit = _ => ()) = {
 
         require(in ne null)
         require(out ne null)
@@ -63,7 +63,7 @@ object ScalaUtils {
         }
     }
 
-    def copyReader(in: Readable[Char], out: Writable[Char], progress: (Long) => Unit = _ => ()) = {
+    def copyReader(in: Readable[Char], out: Writable[Char], progress: Long => Unit = _ => ()) = {
 
         require(in ne null)
         require(out ne null)
@@ -80,7 +80,7 @@ object ScalaUtils {
     }
 
     // Use a closable item and make sure an attempt to close it is done after use
-    def useAndClose[T <: {def close() : Unit}](closable: T)(block: T => Unit) =
+    def useAndClose[T <: {def close()}](closable: T)(block: T => Unit) =
         try {
             block(closable)
         } finally {
@@ -104,4 +104,8 @@ object ScalaUtils {
         // Format result
         SecureUtils.byteArrayToHex(messageDigest.digest())
     }
+
+    def dropTrailingSlash(s: String) = if (s.isEmpty || s.last != '/') s else s.init
+
+    def capitalizeHeader(s: String) = s split '-' map (_.capitalize) mkString "-"
 }

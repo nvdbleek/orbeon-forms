@@ -67,7 +67,8 @@
                 formErrorPanel.errorTitleDiv.innerHTML = title;
                 formErrorPanel.errorDetailsDiv.innerHTML = details;
                 formErrorPanel.show();
-                formErrorPanel.cfg.setProperty("zIndex", ORBEON.xforms.Globals.lastDialogZIndex++);
+                ORBEON.xforms.Globals.lastDialogZIndex += 2;
+                formErrorPanel.cfg.setProperty("zIndex", ORBEON.xforms.Globals.lastDialogZIndex);
                 formErrorPanel.center();
             }
         }
@@ -415,17 +416,16 @@
                         requestDocumentString.push(ORBEON.xforms.Document.getFromClientState(formID, "uuid"));
                         requestDocumentString.push('</xxforms:uuid>\n');
 
-                        // Add request sequence number
-                        var currentSequenceNumber = ORBEON.xforms.Document.getFromClientState(formID, "sequence");
-
+                        // Increment and send sequence number if we have at least one event which is not a request for upload progress or session heartbeat
+                        // NOTE: Still send the element name even if empty as this is what the schema and server-side code expects
                         requestDocumentString.push(indent);
                         requestDocumentString.push('<xxforms:sequence>');
-                        requestDocumentString.push(currentSequenceNumber);
+                        if (_.detect(eventsToSend, function(event) { return event.eventName != "xxforms-upload-progress" && event.eventName != "xxforms-session-heartbeat"; })) {
+                            var currentSequenceNumber = ORBEON.xforms.Document.getFromClientState(formID, "sequence");
+                            requestDocumentString.push(currentSequenceNumber);
+                            ORBEON.xforms.Document.storeInClientState(formID, "sequence", parseInt(currentSequenceNumber) + 1);
+                        }
                         requestDocumentString.push('</xxforms:sequence>\n');
-
-                        // Increment the sequence number if we have at least one event which is not a request for upload progress
-                        var nonProgressEvent = _.detect(eventsToSend, function(event) { return event.eventName != "xxforms-upload-progress"; });
-                        if (nonProgressEvent) ORBEON.xforms.Document.storeInClientState(formID, "sequence", parseInt(currentSequenceNumber) + 1);
 
                         // Add static state
                         var staticState = ORBEON.xforms.Globals.formStaticState[formID].value;
@@ -593,7 +593,7 @@
         var responseXML = o.responseXML;
         if (!YAHOO.lang.isUndefined(o.getResponseHeader) && YAHOO.lang.trim(o.getResponseHeader["Content-Type"]) == "text/html") {
 
-            if (dojox && dojox.html && dojox.html.set) {
+            if (window.dojox && dojox.html && dojox.html.set) {
                 // Parse content we receive into a new div we create just for that purpose
                 var temporaryContainer = document.createElement("div");
                 temporaryContainer.innerHTML = o.responseText;
@@ -966,6 +966,9 @@
                                     if (YAHOO.util.Dom.hasClass(documentElement, "xforms-select-appearance-xxforms-tree")
                                             || YAHOO.util.Dom.hasClass(documentElement, "xforms-select1-appearance-xxforms-tree")) {
                                         ORBEON.xforms.Page.getControl(documentElement).setItemset(itemsetTree);
+                                    } else if (YAHOO.util.Dom.hasClass(documentElement, "xforms-select-appearance-xxforms-menu")
+                                            || YAHOO.util.Dom.hasClass(documentElement, "xforms-select1-appearance-xxforms-menu")) {
+                                        // NOP: We don't do anything for menus, as an update of the menu after the page is loaded isn't supported at this point
                                     } else if (YAHOO.util.Dom.hasClass(documentElement, "xforms-select1-appearance-compact")
                                             || YAHOO.util.Dom.hasClass(documentElement, "xforms-select-appearance-compact")
                                             || YAHOO.util.Dom.hasClass(documentElement, "xforms-select1-appearance-minimal")) {
@@ -999,32 +1002,27 @@
                                         var sb = new Array();
                                         for (var topIndex = 0; topIndex < itemsetTree.length; topIndex++) {
                                             var itemElement = itemsetTree[topIndex];
-                                            var itemElementIndex = 0;
-                                            var label = itemElement[itemElementIndex++];
-                                            var value = itemElement[itemElementIndex++];
                                             var clazz = null;
-                                            if (! YAHOO.lang.isUndefined(itemElement[itemElementIndex]) && ! YAHOO.lang.isArray(itemElement[itemElementIndex])) {
-                                                // We have a property object
-                                                properties = itemElement[itemElementIndex++];
-                                                if (! YAHOO.lang.isUndefined(properties["class"]))
-                                                    clazz = properties["class"];
+                                            if (! YAHOO.lang.isUndefined(itemElement.attributes) && ! YAHOO.lang.isUndefined(itemElement.attributes["class"])) {
+                                                // We have a class property
+                                                clazz = itemElement.attributes["class"];
                                             }
-                                            if (itemElement.length > itemElementIndex) {
+                                            if (! YAHOO.lang.isUndefined(itemElement.children)) {
                                                 // This is an item that contains other elements
-                                                sb[sb.length] = '<optgroup label="' + ORBEON.util.String.escapeAttribute(label) + '"'
+                                                sb[sb.length] = '<optgroup label="' + ORBEON.util.String.escapeAttribute(itemElement.label) + '"'
                                                     + (clazz != null ? ' class="' + ORBEON.util.String.escapeAttribute(clazz) + '"' : '')
                                                     + '">';
                                                 // Go through options in this optgroup
-                                                while (itemElementIndex < itemElement.length) {
-                                                    var itemElementOption = itemElement[itemElementIndex++];
-                                                    var subItemClazz = ! YAHOO.lang.isUndefined(itemElementOption[2]) && ! YAHOO.lang.isUndefined(itemElementOption[2]["class"])
-                                                        ? itemElementOption[2]["class"] : null;
-                                                    sb[sb.length] = generateOption(itemElementOption[0], itemElementOption[1], subItemClazz, selectedValues);
+                                                for (var childItemIndex = 0; childItemIndex < itemElement.children.length; childItemIndex++) {
+                                                    var itemElementOption = itemElement.children[childItemIndex];
+                                                    var subItemClazz = ! YAHOO.lang.isUndefined(itemElementOption.attributes) && ! YAHOO.lang.isUndefined(itemElementOption.attributes["class"])
+                                                        ? itemElementOption.attributes["class"] : null;
+                                                    sb[sb.length] = generateOption(itemElementOption.label, itemElementOption.value, subItemClazz, selectedValues);
                                                 }
                                                 sb[sb.length] = '</optgroup>';
                                             } else {
                                                 // This item is directly an option
-                                                sb[sb.length] = generateOption(label, value, clazz, selectedValues);
+                                                sb[sb.length] = generateOption(itemElement.label, itemElement.value, clazz, selectedValues);
                                             }
                                         }
 
@@ -1082,20 +1080,21 @@
                                         var itemIndex = 0;
                                         for (var k = 0; k < itemsetTree.length; k++) {
                                             var itemElement = itemsetTree[k];
+
                                             var templateClone = template.cloneNode(true);
                                             spanContainer.appendChild(templateClone);
-                                            templateClone.innerHTML = new String(templateClone.innerHTML).replace(new RegExp("\\$xforms-template-label\\$", "g"), itemElement[0].replace(new RegExp("\\$", "g"), "$$$$"));
-                                            ORBEON.util.Utils.stringReplace(templateClone, "$xforms-template-value$", itemElement[1]);
+                                            templateClone.innerHTML = new String(templateClone.innerHTML).replace(new RegExp("\\$xforms-template-label\\$", "g"), itemElement.label.replace(new RegExp("\\$", "g"), "$$$$"));
+                                            ORBEON.util.Utils.stringReplace(templateClone, "$xforms-template-value$", itemElement.value);
                                             var itemEffectiveId = ORBEON.util.Utils.appendToEffectiveId(controlId, "$$e" + itemIndex);
                                             ORBEON.util.Utils.stringReplace(templateClone, "$xforms-item-effective-id$", itemEffectiveId);
                                             ORBEON.util.Utils.stringReplace(templateClone, "$xforms-effective-id$", controlId);
-                                            if (! YAHOO.lang.isUndefined(itemElement[2]) && ! YAHOO.lang.isUndefined(itemElement[2]["class"])) {
-                                                templateClone.className += " " + itemElement[2]["class"];
+                                            if (! YAHOO.lang.isUndefined(itemElement.attributes) && ! YAHOO.lang.isUndefined(itemElement.attributes["class"])) {
+                                                templateClone.className += " " + itemElement.attributes["class"];
                                             }
 
                                             // Restore checked state after copy
                                             var inputCheckboxOrRadio = templateClone.getElementsByTagName("input")[0];
-                                            if (valueToChecked[itemElement[1]] == true) {
+                                            if (valueToChecked[itemElement.value] == true) {
                                                 inputCheckboxOrRadio.checked = true;
                                             }
 

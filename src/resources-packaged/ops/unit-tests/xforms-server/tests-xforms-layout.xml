@@ -1594,7 +1594,7 @@
         <output name="response">
             <controls xmlns:xhtml="http://www.w3.org/1999/xhtml">
                 <xhtml:span id="select-1" class="xforms-control xforms-select xforms-incremental xforms-select-appearance-xxforms-tree xforms-initially-hidden">
-                    <xhtml:div id="select-1$$c">[["1","1",{"class":"my-leaf"}],["2","2",{"class":"my-folder"},["2.1","2.1",{"class":"my-leaf"}],["2.2","2.2",{"class":"my-folder"},["2.2.1","2.2.1",{"class":"my-leaf"}],["2.2.2","2.2.2",{"class":"my-folder"},["2.2.2.1","2.2.2.1",{"class":"my-leaf"}],["2.2.2.2","2.2.2.2",{"class":"my-leaf"}]]]]]</xhtml:div>
+                    <xhtml:div id="select-1$$c">[{"label":"1","value":"1","attributes":{"class":"my-leaf"}},{"label":"2","value":"2","attributes":{"class":"my-folder"},"children":[{"label":"2.1","value":"2.1","attributes":{"class":"my-leaf"}},{"label":"2.2","value":"2.2","attributes":{"class":"my-folder"},"children":[{"label":"2.2.1","value":"2.2.1","attributes":{"class":"my-leaf"}},{"label":"2.2.2","value":"2.2.2","attributes":{"class":"my-folder"},"children":[{"label":"2.2.2.1","value":"2.2.2.1","attributes":{"class":"my-leaf"}},{"label":"2.2.2.2","value":"2.2.2.2","attributes":{"class":"my-leaf"}}]}]}]}]</xhtml:div>
                 </xhtml:span>
             </controls>
         </output>
@@ -1730,7 +1730,7 @@
         <input name="controls">
             <controls xmlns:xforms="http://www.w3.org/2002/xforms"
                       xmlns:ev="http://www.w3.org/2001/xml-events">
-                <xxforms:attribute id="my-src-avt" for="my-image" name="src" value="{image}"/>
+                <xxforms:attribute id="my-src-avt" for="my-image" name="src" value="{image}" for-name="img"/>
                 <xforms:trigger id="my-trigger">
                     <xforms:setvalue ev:event="DOMActivate" ref="image" id="setvalue1">    </xforms:setvalue>
                 </xforms:trigger>
@@ -2308,14 +2308,18 @@
                                 <xh:style>.red { color: red }</xh:style>
                                 <xh:link rel="stylesheet" class="xforms-baseline" href="/css2.css"/>
                                 <xh:link rel="stylesheet" class="xforms-baseline" href="/css2.css"/>
+                                <xh:link rel="stylesheet" href="http://example.org/style.css"/>
                                 <xh:link rel="stylesheet" class="xforms-baseline" href="/foobar1.foobar" type="text/x-foobar"/>
                                 <xh:link rel="stylesheet" href="/css2.css"/>
                                 <xh:link rel="STYLESHEET" href="/css3.css"/>
                                 <xh:link rel="stylesheet" href="/css4.css"/>
                                 <xh:link rel="stylesheet" href="/css5.css" f:url-norewrite="true"/>
+                                <xh:link rel="stylesheet" href="/css6.css" media="print"/>
+                                <xh:link rel="stylesheet" href="/css7.css" media="all"/>
                                 <xh:style type="text/css">.blue { color: blue }</xh:style>
                                 <xh:link rel="stylesheet" href="/foobar2.foobar" type="text/x-foobar"/>
                                 <xh:script class="xforms-baseline" src="/js1.js" type="text/javascript"/>
+                                <xh:script src="http://example.org/script.js" type="text/javascript"/>
                                 <xh:script>function foo()</xh:script>
                                 <xh:script class="xforms-baseline" src="/js2.js"/>
                                 <xh:script class="xforms-baseline" src="/js2.js"/>
@@ -2371,10 +2375,12 @@
                     <xh:link rel="stylesheet" href="/foobar2.foobar" type="text/x-foobar"/>
                     <xh:script class="xforms-baseline" src="/cs1.cs" type="text/coffeescript"/>
                     <xh:script src="/cs2.cs" type="text/coffeescript"/>
-                    <xh:link rel="stylesheet" href="/xforms-server/orbeon-31760c702d3619986af1c9a196821c56cf8e44ae.css" type="text/css" media="all"/>
-                    <xh:link rel="stylesheet" href="/xforms-server/orbeon-d6143e3d8bbef561e7f8608e6f2f17ddc7fb1790.css" type="text/css" media="all"/>
+                    <xh:link rel="stylesheet" href="/xforms-server/orbeon-89574b046e069a16542fbcf0f0e1bb0283ce3b24.css" type="text/css" media="all"/>
+                    <xh:link rel="stylesheet" href="/xforms-server/orbeon-4c1da45e028aea995bd6d6126c38e8cb376aa195.css" type="text/css" media="all"/>
                     <xh:style>.red { color: red }</xh:style>
+                    <xh:link rel="stylesheet" href="http://example.org/style.css"/>
                     <xh:link rel="stylesheet" href="/css5.css" f:url-norewrite="true"/>
+                    <xh:link rel="stylesheet" href="/css6.css" media="print"/>
                     <xh:style type="text/css">.blue { color: blue }</xh:style>
                 </xh:head>
                 <xh:body>
@@ -2385,6 +2391,7 @@
                     <xh:ul>
                         <xh:li>/css3.css</xh:li>
                         <xh:li>/css4.css</xh:li>
+                        <xh:li>/css7.css</xh:li>
                     </xh:ul>
                     <xh:ul>
                         <xh:li>/js1.js</xh:li>
@@ -2395,13 +2402,13 @@
                         <xh:li>/js4.js</xh:li>
                     </xh:ul>
                 </xh:body>
-                <xh:script type="text/javascript" src="/xforms-server/orbeon-e3386f743649d644e767142dfe7d447175463880.js"/>
-                <xh:script type="text/javascript" src="/xforms-server/orbeon-bc2cdd195a4d1d6a4c12fc548cc9f7ab305d8965.js"/>
+                <xh:script type="text/javascript" src="/xforms-server/orbeon-21654f0da78743b83a6e8c062db2ea191c7db2f1.js"/>
+                <xh:script type="text/javascript" src="/xforms-server/orbeon-3fb834bac960ffe5afd47bc1429bf62c1a9a3367.js"/>
+                <xh:script src="http://example.org/script.js" type="text/javascript"/>
                 <xh:script>function foo()</xh:script>
                 <xh:script xmlns:f="http://orbeon.org/oxf/xml/formatting" src="/js5.js" type="text/javascript" f:url-norewrite="true"></xh:script>
                 <xh:script>function bar()</xh:script>
             </xh:html>
-
         </output>
     </test>
 
@@ -2501,6 +2508,74 @@
                 <xh:script src="/ops/yui/slider/slider-min.js"/>
                 <xh:script src="/xbl/orbeon/number/number.js"/>
             </xh:head>
+        </output>
+    </test>
+
+    <test description="Nested layout repeat with and without initial data" name="oxf:pipeline">
+        <!-- See: http://forge.ow2.org/tracker/index.php?func=detail&aid=315953&group_id=168&atid=350207 -->
+        <input name="config" href="wrap-xforms-init-allcontrols.xpl"/>
+        <input name="document">
+            <xhtml:html>
+                <xhtml:head>
+                    <xforms:model id="model" xxforms:xhtml-layout="span">
+                        <xforms:instance id="instance">
+                            <lists>
+                                <list>
+                                </list>
+                                <list>
+                                    <item name="a"/>
+                                    <item name="b"/>
+                                </list>
+                            </lists>
+                        </xforms:instance>
+                    </xforms:model>
+                </xhtml:head>
+                <xhtml:body>
+                    <xforms:repeat ref="list" id="outer-repeat">
+                        <xhtml:div>
+                            <xforms:repeat ref="item" id="inner-repeat">
+                                <xforms:input id="my-input" ref="@name"/>
+                                <xhtml:br class="inner-br"/>
+                            </xforms:repeat>
+                        </xhtml:div>
+                        <xhtml:br class="outer-br"/>
+                    </xforms:repeat>
+                </xhtml:body>
+            </xhtml:html>
+        </input>
+        <output name="response">
+            <controls xmlns:xhtml="http://www.w3.org/1999/xhtml">
+                <xhtml:div id="repeat-begin-outer-repeat" class="xforms-repeat-begin-end"/>
+                <xhtml:div class="xforms-repeat-delimiter"/>
+                <xhtml:div class="xforms-repeat-selected-item-1">
+                    <xhtml:span id="repeat-begin-inner-repeat·1" class="xforms-repeat-begin-end"/>
+                    <xhtml:span id="repeat-end-inner-repeat·1" class="xforms-repeat-begin-end"/>
+                </xhtml:div>
+                <xhtml:br class="outer-br xforms-repeat-selected-item-1"/>
+                <xhtml:div class="xforms-repeat-delimiter"/>
+                <xhtml:span id="repeat-begin-inner-repeat·2" class="xforms-repeat-begin-end"/>
+                <xhtml:span class="xforms-repeat-delimiter"/>
+                <xhtml:span id="my-input·2-1" class="xforms-control xforms-input">
+                    <xhtml:input id="my-input$xforms-input-1·2-1" type="text" name="my-input$xforms-input-1·2-1" value="a" class="xforms-input-input"/>
+                </xhtml:span>
+                <xhtml:span class="xforms-repeat-delimiter"/>
+                <xhtml:span id="my-input·2-2" class="xforms-control xforms-input">
+                    <xhtml:input id="my-input$xforms-input-1·2-2" type="text" name="my-input$xforms-input-1·2-2" value="b" class="xforms-input-input"/>
+                </xhtml:span>
+                <xhtml:span id="repeat-end-inner-repeat·2" class="xforms-repeat-begin-end"/>
+                <xhtml:div class="xforms-repeat-delimiter"/>
+                <xhtml:div class="xforms-repeat-template">
+                    <xhtml:span id="repeat-begin-inner-repeat" class="xforms-repeat-begin-end"/>
+                    <xhtml:span class="xforms-repeat-delimiter"/>
+                    <xhtml:span id="my-input" class="xforms-control xforms-input">
+                        <xhtml:input id="my-input$xforms-input-1" type="text" name="my-input$xforms-input-1" value="" class="xforms-input-input"/>
+                    </xhtml:span>
+                    <xhtml:br class="inner-br"/>
+                    <xhtml:span id="repeat-end-inner-repeat" class="xforms-repeat-begin-end"/>
+                </xhtml:div>
+                <xhtml:br class="outer-br xforms-repeat-template"/>
+                <xhtml:div id="repeat-end-outer-repeat" class="xforms-repeat-begin-end"/>
+            </controls>
         </output>
     </test>
 

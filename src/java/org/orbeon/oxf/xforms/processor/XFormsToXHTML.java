@@ -35,7 +35,6 @@ import org.orbeon.oxf.xforms.state.XFormsStateManager;
 import org.orbeon.oxf.xforms.state.XFormsStaticStateCache;
 import org.orbeon.oxf.xml.*;
 import org.orbeon.oxf.xml.dom4j.LocationDocumentResult;
-import org.xml.sax.ContentHandler;
 import org.xml.sax.SAXException;
 
 import javax.xml.transform.stream.StreamResult;
@@ -225,11 +224,11 @@ public class XFormsToXHTML extends ProcessorImpl {
             // Output resulting document
             if (outputName.equals("document")) {
                 // Normal case where we output XHTML
-                outputResponseDocument(pipelineContext, externalContext, indentedLogger, stage2CacheableState.getAnnotatedTemplate(),
+                outputResponseDocument(externalContext, indentedLogger, stage2CacheableState.getAnnotatedTemplate(),
                         containingDocument[0], xmlReceiver);
             } else {
                 // Output in test mode
-                testOutputResponseState(pipelineContext, containingDocument[0], indentedLogger, xmlReceiver);
+                testOutputResponseState(containingDocument[0], indentedLogger, xmlReceiver);
             }
 
             // Notify state manager
@@ -423,10 +422,10 @@ public class XFormsToXHTML extends ProcessorImpl {
         }
     }
 
-    public static void outputResponseDocument(final PipelineContext pipelineContext, final ExternalContext externalContext,
-                                             final IndentedLogger indentedLogger,
-                                             final SAXStore annotatedDocument, final XFormsContainingDocument containingDocument,
-                                             final XMLReceiver xmlReceiver) throws SAXException, IOException {
+    public static void outputResponseDocument(final ExternalContext externalContext,
+                                              final IndentedLogger indentedLogger,
+                                              final SAXStore annotatedDocument, final XFormsContainingDocument containingDocument,
+                                              final XMLReceiver xmlReceiver) throws SAXException, IOException {
 
         final List<XFormsContainingDocument.Load> loads = containingDocument.getLoadsToRun();
         if (containingDocument.isGotSubmissionReplaceAll()) {
@@ -484,18 +483,18 @@ public class XFormsToXHTML extends ProcessorImpl {
         containingDocument.afterInitialResponse();
     }
 
-    private void testOutputResponseState(final PipelineContext pipelineContext, final XFormsContainingDocument containingDocument,
-                                         final IndentedLogger indentedLogger, final XMLReceiver xmlReceiver) throws SAXException {
+    private void testOutputResponseState(final XFormsContainingDocument containingDocument, final IndentedLogger indentedLogger,
+                                         final XMLReceiver xmlReceiver) throws SAXException {
         // Output XML response
 
-        XFormsServer.outputAjaxResponse(containingDocument, indentedLogger, null, pipelineContext, null, xmlReceiver, false, true);
+        XFormsServer.outputAjaxResponse(containingDocument, indentedLogger, null, null, xmlReceiver, false, true);
     }
 
-    public static ExternalContext.Response getResponse(ContentHandler contentHandler, final ExternalContext externalContext) {
+    public static ExternalContext.Response getResponse(XMLReceiver xmlReceiver, final ExternalContext externalContext) {
         ExternalContext.Response response;
-        if (contentHandler != null) {
+        if (xmlReceiver != null) {
             // If a response is written, it will be through a conversion to XML first
-            final ContentHandlerOutputStream contentHandlerOutputStream = new ContentHandlerOutputStream(contentHandler);
+            final ContentHandlerOutputStream contentHandlerOutputStream = new ContentHandlerOutputStream(xmlReceiver);
             response = new ResponseAdapter() {
 
                 private String charset;
@@ -518,13 +517,18 @@ public class XFormsToXHTML extends ProcessorImpl {
 
                 @Override
                 public void setContentType(String contentType) {
-                    try {
-                        // Assume that content type is always set, otherwise this won't work
-                        charset = NetUtils.getContentTypeCharset(contentType);
-                        contentHandlerOutputStream.startDocument(contentType);
-                    } catch (SAXException e) {
-                        throw new OXFException(e);
-                    }
+                    setHeader("Content-Type", contentType);
+                }
+
+                @Override
+                public void setContentLength(int len) {
+                    // TODO: should be set on ContentHandlerOutputStream
+                    setHeader("Content-Length", Integer.toString(len));
+                }
+
+                @Override
+                public void setStatus(int status) {
+                    // TODO: should be set on ContentHandlerOutputStream
                 }
 
                 @Override
@@ -534,9 +538,18 @@ public class XFormsToXHTML extends ProcessorImpl {
 
                 @Override
                 public void setHeader(String name, String value) {
-                    // TODO: It is not sound that we output headers here as they should be passed to the
-                    // binary document in the pipeline instead.
-                    externalContext.getResponse().setHeader(name, value);
+
+                    // Handle Content-Type
+                    if (name.toLowerCase().equals("content-type")) {
+                        try {
+                            // Assume that content type is always set, otherwise this won't work
+                            charset = NetUtils.getContentTypeCharset(value);
+                            contentHandlerOutputStream.startDocument(value);
+                        } catch (SAXException e) {
+                            throw new OXFException(e);
+                        }
+                    }
+                    // Don't allow other headers
                 }
 
                 @Override

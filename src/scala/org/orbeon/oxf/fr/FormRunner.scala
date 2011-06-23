@@ -14,13 +14,81 @@
 package org.orbeon.oxf.fr
 
 import org.orbeon.oxf.properties.Properties
+import org.orbeon.oxf.xml._
 import scala.collection.JavaConversions._
 import org.orbeon.oxf.util.XPathCache
-import org.orbeon.oxf.xml._
+import org.orbeon.oxf.common.OXFException
+import org.orbeon.oxf.util.ScalaUtils._
 
 object FormRunner {
 
-    def getHeaders(app: String, form: String, formOrData: String) = {
+    val propertyPrefix = "oxf.fr.authentication."
+
+    val methodPropertyName = propertyPrefix + "method"
+    val containerRolesPropertyName = propertyPrefix + "container.roles"
+    val headerUsernamePropertyName = propertyPrefix + "header.username"
+    val headerRolesPropertyName = propertyPrefix + "header.roles"
+
+    type UserRoles = {
+        def getRemoteUser(): String
+        def isUserInRole(role: String): Boolean
+    }
+
+    /**
+     * Get the username and roles from the request, based on the Form Runner configuration.
+     */
+    def getUserRoles(userRoles: UserRoles, getHeader: String => Option[Array[String]]): (Option[String], Option[Array[String]]) = {
+
+        val propertySet = Properties.instance.getPropertySet
+        propertySet.getString(methodPropertyName, "container") match {
+            case "container" =>
+
+                val rolesString = propertySet.getString(containerRolesPropertyName)
+
+                assert(rolesString != null)
+
+                val username = Option(userRoles.getRemoteUser)
+
+                val rolesArray = (
+                    for {
+                        role <- rolesString.split(""",\s+""")
+                        if userRoles.isUserInRole(role)
+                    } yield
+                        role)
+
+                val roles = rolesArray match {
+                    case Array() => None
+                    case array => Some(array)
+                }
+
+                (username, roles)
+
+            case "header" =>
+
+                def headerOption(name: String) = Option(propertySet.getString(name)) flatMap (p => getHeader(p.toLowerCase))
+
+                val username = headerOption(headerUsernamePropertyName) map (_.head)
+                val roles = headerOption(headerRolesPropertyName) map (_ flatMap (_.split("""(\s*[,\|]\s*)+""")))
+
+                (username, roles)
+
+            case other => throw new OXFException("Unsupported authentication method, check the '" + methodPropertyName + "' property:" + other)
+        }
+    }
+
+    def getUserRolesAsHeaders(userRoles: UserRoles, getHeader: String => Option[Array[String]]) = {
+
+        val (username, roles) = FormRunner.getUserRoles(userRoles, getHeader)
+
+        val result = collection.mutable.Map[String, Array[String]]()
+
+        username foreach (u => result += ("orbeon-username" -> Array(u)))
+        roles foreach (r => result += ("orbeon-roles" -> r))
+
+        result.toMap
+    }
+
+    def getPersistenceURLHeaders(app: String, form: String, formOrData: String) = {
 
         require(app.nonEmpty)
         require(form.nonEmpty)
@@ -29,30 +97,49 @@ object FormRunner {
         val propertySet = Properties.instance.getPropertySet
 
         // Find provider
-        val providerProperty = Seq("oxf.fr.persistence.provider", app, form, formOrData) mkString "."
-        val provider = propertySet.getString(providerProperty)
+        def findProvider = {
+            val providerProperty = Seq("oxf.fr.persistence.provider", app, form, formOrData) mkString "."
+            propertySet.getString(providerProperty)
+        }
+
+        val provider = findProvider
 
         // Find provider URI
-//        val uriProperty = Seq("oxf.fr.persistence", provider, "uri") mkString "."
-//        val uri = propertySet.getObject(uriProperty)
+        def findProviderURL = {
+            val uriProperty = Seq("oxf.fr.persistence", provider, "uri") mkString "."
+            propertySet.getStringOrURIAsString(uriProperty)
+        }
 
         val propertyPrefix = "oxf.fr.persistence." + provider
 
+        // Build headers map
+        val headers = (
+            for {
+                propertyName <- propertySet.getPropertiesStartsWith(propertyPrefix)
+                lowerSuffix = propertyName.substring(propertyPrefix.length + 1)
+                if lowerSuffix != "uri"
+                headerName = "Orbeon-" + capitalizeHeader(lowerSuffix)
+                headerValue = propertySet.getObject(propertyName).toString
+            } yield
+                (headerName -> headerValue)) toMap
+
+        (findProviderURL, headers)
+    }
+
+    def getPersistenceHeadersAsXML(app: String, form: String, formOrData: String) = {
+
+        val (uri, headers) = getPersistenceURLHeaders(app, form, formOrData)
+
         // Build headers document
-        val headers =
+        val headersXML =
             <headers>{
                 for {
-                    propertyName <- propertySet.getPropertiesStartsWith(propertyPrefix)
-                    lowerSuffix = propertyName.substring(propertyPrefix.length + 1)
-                    if lowerSuffix != "uri"
-                    upperSuffix = lowerSuffix split '-' map (_.capitalize) mkString "-"
-                    headerName = "Orbeon-" + upperSuffix
-                    headerValue = propertySet.getObject(propertyName).toString
+                    (name, value) <- headers
                 } yield
-                    <header><name>{XMLUtils.escapeXMLMinimal(headerName)}</name><value>{XMLUtils.escapeXMLMinimal(headerValue)}</value></header>
+                    <header><name>{XMLUtils.escapeXMLMinimal(name)}</name><value>{XMLUtils.escapeXMLMinimal(value)}</value></header>
             }</headers>.toString
 
         // Convert to TinyTree
-        TransformerUtils.stringToTinyTree(XPathCache.getGlobalConfiguration, headers, false, false)
+        TransformerUtils.stringToTinyTree(XPathCache.getGlobalConfiguration, headersXML, false, false)
     }
 }

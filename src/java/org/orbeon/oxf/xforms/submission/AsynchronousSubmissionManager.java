@@ -14,6 +14,8 @@
 package org.orbeon.oxf.xforms.submission;
 
 import org.orbeon.oxf.common.OXFException;
+import org.orbeon.oxf.pipeline.api.ExternalContext;
+import org.orbeon.oxf.pipeline.api.PipelineContext;
 import org.orbeon.oxf.util.*;
 import org.orbeon.oxf.xforms.XFormsContainingDocument;
 import org.orbeon.oxf.xforms.XFormsProperties;
@@ -88,7 +90,25 @@ public class AsynchronousSubmissionManager {
         // NOTE: If we want to re-enable foreground async submissions, we must:
         // o do a better detection: !(xf-submit-done/xf-submit-error listener) && replace="none"
         // o OR provide an explicit hint on xf:submission
-        asynchronousSubmissions.submit(callable);
+        asynchronousSubmissions.submit(new Callable<SubmissionResult>() {
+
+            final ExternalContext externalContext = NetUtils.getExternalContext();
+            public SubmissionResult call() throws Exception {
+                // Make sure an ExternalContext is scoped for the callable. We use the same external context as the caller,
+                // even though that can be a dangerous. Should we use AsyncExternalContext here?
+                final PipelineContext pipelineContext = new PipelineContext();
+                pipelineContext.setAttribute(PipelineContext.EXTERNAL_CONTEXT, externalContext);
+                boolean success = false;
+                try {
+                    // Perform call
+                    final SubmissionResult result = callable.call();
+                    success = true;
+                    return result;
+                } finally {
+                    pipelineContext.destroy(success);
+                }
+            }
+        });
     }
 
     public boolean hasPendingAsynchronousSubmissions() {

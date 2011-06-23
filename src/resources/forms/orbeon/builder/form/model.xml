@@ -35,7 +35,7 @@
     <!-- Variable pointing to the current language -->
     <xxforms:variable name="fb-lang" select="instance('fb-language-instance')"/>
     <xxforms:variable name="form-resources" model="fr-resources-model" select="$fr-form-resources" as="element(resource)?"/>
-    
+
     <xxforms:variable name="is-pe" select="context:isPE()" as="xs:boolean"/>
 
     <!-- Other variables -->
@@ -108,7 +108,7 @@
 
         <!-- Set current language: for new forms, use current FR language;
              for existing form, use language based on first resources available in loaded form -->
-        <xforms:setvalue ref="$fb-lang" value="if (xxforms:instance('fr-parameters-instance')/mode = 'new') 
+        <xforms:setvalue ref="$fb-lang" value="if (xxforms:instance('fr-parameters-instance')/mode = 'new')
                 then xxforms:instance('fr-language-instance')
                 else $resources/resource[1]/@xml:lang"/>
         <!-- For new forms -->
@@ -137,6 +137,7 @@
         <!-- Show editor case if mode is not new -->
         <xxforms:variable name="is-new" select="xxforms:instance('fr-parameters-instance')/mode = 'new'" as="xs:boolean"/>
         <xforms:action if="$is-new">
+            <xforms:setvalue ref="instance('fb-metadata-instance')/mode" value="'edit'"/>
             <xxforms:show ev:event="show-fb-editor-create-dialog" dialog="fb-editor-metadata-dialog"/>
         </xforms:action>
         <xforms:action if="not($is-new)">
@@ -206,6 +207,22 @@
             <logo mediatype="image/png" filename="orbeon-logo-trimmed-transparent-30.png" size="">/apps/fr/style/orbeon-logo-trimmed-transparent-30.png</logo>
         </metadata>
     </xforms:instance>
+
+    <!-- Similar to fr-triggers-instance, but for FB-specific buttons -->
+    <xforms:instance id="fb-triggers-instance">
+        <triggers>
+            <save-as/>
+        </triggers>
+    </xforms:instance>
+
+    <xforms:bind nodeset="instance('fb-triggers-instance')">
+        <!-- Condition for disabling Save as… button -->
+        <!-- HACK: Not sure why, but if we don't put a calculate here (which is useless), then the readonly is not evaluated on recalculate -->
+        <xforms:bind nodeset="save-as" readonly="xxforms:instance('fr-parameters-instance')/mode != 'edit'" calculate="xxforms:instance('fr-parameters-instance')/mode"/>
+    </xforms:bind>
+
+    <!-- HACK: Bind has inter-model dependency -->
+    <xforms:recalculate ev:event="xxforms-value-changed" ev:observer="fr-parameters-instance"/>
 
     <!-- All form resources -->
     <xforms:instance id="fr-form-resources" src="oxf:/forms/orbeon/builder/form/resources.xml"
@@ -517,12 +534,14 @@
 
     <!-- Rename bind -->
     <xforms:action ev:event="fb-rename-bind">
-        <xxforms:variable name="old-bind-id" select="concat(event('old-name'), '-bind')"/>
+        <xxforms:variable name="old-name" select="event('old-name') treat as xs:string"/>
+        <xxforms:variable name="new-name" select="event('new-name') treat as xs:string"/>
+        <xxforms:variable name="old-bind-id" select="concat($old-name, '-bind')"/>
         <xxforms:variable name="bind" select="$model//xforms:bind[@id = $old-bind-id]"/>
         <xforms:action context="$bind" if="exists(.)">
-            <xforms:setvalue ref="@id" value="concat(event('new-name'), '-bind')"/>
-            <xforms:insert context="." origin="xxforms:attribute('name', event('new-name'))"/>
-            <xforms:setvalue ref="@nodeset" value="event('new-name')"/>
+            <xforms:setvalue ref="@id" value="concat($new-name, '-bind')"/>
+            <xforms:insert context="." origin="xxforms:attribute('name', $new-name)"/>
+            <xforms:setvalue ref="@nodeset" value="$new-name"/>
         </xforms:action>
     </xforms:action>
 
@@ -619,25 +638,27 @@
                               select="if ($control-name) then $body//*[@id = concat($control-name, '-control')] else ()"/>
             <xxforms:variable name="current-section-name"
                               select="if ($control-name) then $current-control/ancestor::fr:section[1]/(if (@context) then @context else substring-before(@bind, '-bind')) else $section-name"/>
+            <xxforms:variable name="is-custom-instance" select="$metadata-instance/form-instance-mode = 'custom'"/>
             <xforms:action context="$model/xforms:bind[@id = 'fr-form-binds']">
-                <xforms:action if="not(xforms:bind[@nodeset = $current-section-name])">
+                <xforms:action if="empty(xforms:bind[@name = $current-section-name])">
                     <xforms:insert context="." nodeset="xforms:bind" origin="instance('fb-bind-template')"/>
                     <xxforms:variable name="bind" select="xforms:bind[last()]" as="element(xforms:bind)"/>
                     <xforms:setvalue ref="$bind/@id" value="concat($current-section-name, '-bind')"/>
-                    <xforms:setvalue ref="$bind/@nodeset" value="$current-section-name"/>
+                    <xforms:setvalue ref="$bind/@name" value="$current-section-name"/>
+                    <xforms:setvalue ref="$bind/@nodeset" value="if ($is-custom-instance) then '()' else $current-section-name"/>
                 </xforms:action>
             </xforms:action>
 
             <xforms:action if="$control-name">
                 <!-- Insert bind for control if needed -->
                 <xxforms:variable name="current-bind-id" select="concat($control-name, '-bind')"/>
-                <xforms:action context="$model/xforms:bind[@id = 'fr-form-binds']/xforms:bind[@nodeset = $current-section-name]">
+                <xforms:action context="$model/xforms:bind[@id = 'fr-form-binds']/xforms:bind[@name = $current-section-name]">
                     <xforms:action if="not(xforms:bind[@id = $current-bind-id])">
                         <xforms:insert context="." nodeset="xforms:bind" origin="instance('fb-bind-template')"/>
                         <xxforms:variable name="bind" select="xforms:bind[last()]" as="element(xforms:bind)"/>
                         <xforms:setvalue ref="$bind/@id" value="$current-bind-id"/>
                         <xforms:insert context="$bind" origin="xxforms:attribute('name', $control-name)"/>
-                        <xforms:setvalue ref="$bind/@nodeset" value="$control-name"/>
+                        <xforms:setvalue ref="$bind/@nodeset" value="if ($is-custom-instance) then '()' else $control-name"/>
                     </xforms:action>
                 </xforms:action>
             </xforms:action>
@@ -682,7 +703,7 @@
 
     <!-- Template for outer bind -->
     <xforms:instance id="fb-bind-template" xxforms:readonly="true" xxforms:exclude-result-prefixes="pipeline xhtml xs xsi ev xi xxi xxforms fr fb saxon xbl exforms context">
-        <xforms:bind id="fr-form-binds" nodeset="."/>
+        <xforms:bind id="fr-form-binds" nodeset="." name=""/>
     </xforms:instance>
 
     <xforms:bind nodeset="instance('fb-variables')">
@@ -759,7 +780,7 @@
             <application-name/>
             <form-name/>
             <next-trigger/>
-
+            <mode/> <!-- edit | save-as -->
             <toolbox>
                 <schema/>
                 <css/>

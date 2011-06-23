@@ -39,7 +39,7 @@
             <!-- Handle head scripts if present -->
             <xsl:apply-templates select="/xhtml:html/xhtml:head/xhtml:script"/>
             <!-- Body -->
-            <xhtml:div id="orbeon" class="orbeon-portlet-content orbeon">
+            <xhtml:div id="orbeon" class="orbeon-portlet-body orbeon">
                 <xhtml:div class="maincontent">
                     <xsl:apply-templates select="/xhtml:html/xhtml:body/node()"/>
                 </xhtml:div>
@@ -59,14 +59,6 @@
             <xsl:apply-templates select="@*"/>
             <xhtml:input type="hidden" name="orbeon-embeddable" value="true"/>
             <xsl:apply-templates select="node()"/>
-        </xsl:copy>
-    </xsl:template>
-
-    <!-- If the field is a checkbox, add "[]", remove it. This is to support PHP-based proxies, which might add the brackets. -->
-    <xsl:template match="xhtml:input[@type = 'checkbox']">
-        <xsl:copy>
-            <xsl:attribute name="name" select="concat(@name, '[]')"/>
-            <xsl:apply-templates select="@* except @name | node()"/>
         </xsl:copy>
     </xsl:template>
 

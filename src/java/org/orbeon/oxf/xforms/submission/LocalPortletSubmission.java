@@ -13,7 +13,11 @@
  */
 package org.orbeon.oxf.xforms.submission;
 
+import org.apache.commons.lang.StringUtils;
+import org.orbeon.oxf.externalcontext.AsyncExternalContext;
+import org.orbeon.oxf.externalcontext.ExternalContextWrapper;
 import org.orbeon.oxf.pipeline.api.ExternalContext;
+import org.orbeon.oxf.pipeline.api.PipelineContext;
 import org.orbeon.oxf.portlet.OrbeonPortlet2Delegate;
 import org.orbeon.oxf.util.ConnectionResult;
 import org.orbeon.oxf.util.IndentedLogger;
@@ -93,42 +97,58 @@ public class LocalPortletSubmission extends BaseSubmission {
     public SubmissionResult connect(final XFormsModelSubmission.SubmissionParameters p,
                                     final XFormsModelSubmission.SecondPassParameters p2, final XFormsModelSubmission.SerializationParameters sp) throws Exception {
 
-        // URI with xml:base resolution
-        final URI resolvedURI = XFormsUtils.resolveXMLBase(containingDocument, submission.getSubmissionElement(), p2.actionOrResource);
-
-        final String[] headersToForward = p.isReplaceAll ? RequestDispatcherSubmission.STANDARD_HEADERS_TO_FORWARD : RequestDispatcherSubmission.MINIMAL_HEADERS_TO_FORWARD;
-        // TODO: Harmonize with HTTP submission handling of headers
-
         final IndentedLogger timingLogger = getTimingLogger(p, p2);
         final IndentedLogger detailsLogger = getDetailsLogger(p, p2);
 
-        // Evaluate headers if any
+        // URI with xml:base resolution
+        final URI resolvedURI = XFormsUtils.resolveXMLBase(containingDocument, submission.getSubmissionElement(), p2.actionOrResource);
+
+        // Headers
         final Map<String, String[]> customHeaderNameValues = evaluateHeaders(p.contextStack);
+        final String[] headersToForward = StringUtils.split(getHeadersToForward(containingDocument, p.isReplaceAll));
 
         final String submissionEffectiveId = submission.getEffectiveId();
 
-        // Pack external call into a Runnable so it can be run:
-        // o now and synchronously
-        // o now and asynchronously
-        // o later as a "foreground" asynchronous submission
+        // If async, use a "safe" copy of the context
+        final OrbeonPortlet2Delegate currentPortlet = (OrbeonPortlet2Delegate) OrbeonPortlet2Delegate.currentPortlet().value();
+
+        final ExternalContext.Response response = containingDocument.getResponse() != null ? containingDocument.getResponse() : NetUtils.getExternalContext().getResponse();
+        final ExternalContext asyncExternalContext = p2.isAsynchronous
+                ? new AsyncExternalContext(NetUtils.getExternalContext().getRequest(), response)
+                : NetUtils.getExternalContext();
+
+        // Pack external call into a Runnable so it can be run synchronously or asynchronously.
         final Callable<SubmissionResult> callable = new Callable<SubmissionResult>() {
             public SubmissionResult call() throws Exception {
 
-                // TODO: This refers to PropertyContext, XFormsContainingDocument, and Submission. FIXME!
+                if (p2.isAsynchronous && timingLogger.isDebugEnabled())
+                    timingLogger.startHandleOperation("", "running asynchronous local portlet submission submission", "id", submission.getEffectiveId());
+
+                // TODO: This refers to XFormsContainingDocument, and Submission. FIXME!
 
                 // Open the connection
                 final boolean[] status = { false , false };
                 ConnectionResult connectionResult = null;
                 try {
-                    connectionResult = openLocalConnection(NetUtils.getExternalContext(),
-                        detailsLogger, containingDocument.getResponse(), p.isDeferredSubmissionSecondPassReplaceAll ? null : submission,
+                    connectionResult = openLocalConnection(asyncExternalContext.getRequest(), response,
+                        detailsLogger, p.isDeferredSubmissionSecondPassReplaceAll ? null : submission,
                         p.actualHttpMethod, resolvedURI.toString(), sp.actualRequestMediatype, sp.messageBody,
                         sp.queryString, p.isReplaceAll, headersToForward, customHeaderNameValues, new SubmissionProcess() {
-                                public void process(ExternalContext.Request request, ExternalContext.Response response) {
-                                    // Delegate to portlet
-                                    OrbeonPortlet2Delegate.processPortletRequest(request, response);
-                                }
-                            }, false, true);
+                            public void process(final ExternalContext.Request request, final ExternalContext.Response response) {
+                                // Delegate to portlet
+                                currentPortlet.getProcessorService().service(new ExternalContextWrapper(asyncExternalContext) {
+                                            @Override
+                                            public ExternalContext.Request getRequest() {
+                                                return request;
+                                            }
+
+                                            @Override
+                                            public ExternalContext.Response getResponse() {
+                                                return response;
+                                            }
+                                        }, new PipelineContext());
+                            }
+                        }, true, false);
 
                     // Update status
                     status[0] = true;

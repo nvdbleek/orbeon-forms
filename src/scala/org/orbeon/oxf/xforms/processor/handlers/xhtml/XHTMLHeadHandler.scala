@@ -81,7 +81,6 @@ class XHTMLHeadHandler extends XHTMLHeadHandlerBase {
         outputResources(outputCSSElement, XFormsFeatures.getCSSResources,
             containingDocument.getStaticOps.getXBLStyles,
             containingDocument.getStaticOps.baselineResources._2, minimal)
-
     }
 
     override def outputJavaScriptResources(helper: ContentHandlerHelper, xhtmlPrefix: String, minimal: Boolean, attributesImpl: AttributesImpl) {

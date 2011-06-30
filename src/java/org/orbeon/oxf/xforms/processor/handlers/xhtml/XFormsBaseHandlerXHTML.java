@@ -47,6 +47,14 @@ public abstract class XFormsBaseHandlerXHTML extends XFormsBaseHandler {
     protected HandlerContext getHandlerContext() {
     	return this.handlerContext;
     }
+    
+    /**
+     * Returns the containing document. You can't access the containingDocument field from the super class in Scala 
+     * (Scala uses inner classes so you get an IllegalAccessError when accessing it)
+     */
+    protected XFormsContainingDocument getContainingDocument() {
+    	return containingDocument;
+    }
 
     protected static void outputDisabledAttribute(AttributesImpl newAttributes) {
         // @disabled="disabled"

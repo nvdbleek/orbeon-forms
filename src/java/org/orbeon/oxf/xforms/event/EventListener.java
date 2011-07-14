@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2010 Orbeon, Inc.
+ * Copyright (C) 2011 Orbeon, Inc.
  *
  * This program is free software; you can redistribute it and/or modify it under the terms of the
  * GNU Lesser General Public License as published by the Free Software Foundation; either version
@@ -11,10 +11,8 @@
  *
  * The full text of the license is available at http://www.gnu.org/copyleft/lesser.html
  */
-(function() {
+package org.orbeon.oxf.xforms.event;
 
-    ORBEON.xforms.Form = function() {};
-    var Form = ORBEON.xforms.Form;
-
-
-})();
+public interface EventListener {
+    void handleEvent(XFormsEvent event);
+}

@@ -225,19 +225,19 @@
                                                   case this is called in response to users' actions such as click on a
                                                   Save button).
                                                 * false if this action should be performed even if the data is invalid
-                                                  (e.g. when doing an auto-save).
-        -->
+                                                  (e.g. when doing an auto-save). -->
         <xxforms:variable name="check-data-valid" select="event('fr:check-data-valid')"/>
 
         <xforms:setvalue ref="instance('fr-persistence-instance')/save-attempted">true</xforms:setvalue>
         <xforms:action if="$document != ''">
 
-            <!-- Check validity of data before trying to save, because 1) we don't want to save attachments if the form
-                 is invalid and 2) submission doesn't check validity anymore.
-                 We use instance('fr-error-summary-instance')/valid and not xxforms:valid() because the instance
+            <!-- Check validity of data before trying to save, because:
+                 1) We don't want to save attachments if the form is invalid.
+                 2) Submission doesn't check validity anymore. -->
+            <!-- We use instance('fr-error-summary-instance')/valid and not xxforms:valid() because the instance
                  validity may not be reflected with the use of XBL components. -->
-            <xxforms:variable name="validity-passed" select="not($check-data-valid) or
-                (xxforms:instance('fr-error-summary-instance')/valid = 'true')" as="xs:boolean"/>
+
+            <xxforms:variable name="validity-passed" select="not($check-data-valid) or (xxforms:instance('fr-error-summary-instance')/valid = 'true')" as="xs:boolean"/>
 
             <xforms:action if="not($validity-passed)">
                 <!-- Data not valid: display error -->
@@ -426,11 +426,14 @@
             <data-safe-override/>
             <!-- Whether data is safe -->
             <data-safe/>
+            <!-- Is the captcha valid: start with false, will set it to true when valid -->
+            <captcha>false</captcha>
         </save>
     </xforms:instance>
 
     <xforms:bind nodeset="instance('fr-persistence-instance')">
         <xforms:bind nodeset="data-safe" calculate="../data-status = 'clean' or ../data-safe-override = 'true'"/>
+        <xforms:bind nodeset="captcha" constraint=". = 'true'"/>
     </xforms:bind>
 
     <!-- Configuration for Saxon serialization -->

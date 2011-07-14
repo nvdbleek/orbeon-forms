@@ -43,8 +43,8 @@
                                                                                                        /apps/fr/style/form-runner-base.css
                                                                                                        /apps/fr/style/form-runner-html.css
                                                                                                        /apps/fr/style/form-runner-orbeon.css"/>
-    <property as="xs:string"  name="oxf.fr.authentication.method"                               value="header"/> <!-- "container", "header", or empty -->
-    <property as="xs:string"  name="oxf.fr.authentication.header.username"                      value="My-Username-Header"/>
+    <property as="xs:string"  name="oxf.fr.authentication.method"                               value=""/>                      <!-- "container" or "header" or empty -->
+    <property as="xs:string"  name="oxf.fr.authentication.header.username"                      value="My-Username-Header"/>    <!-- with Liferay: Orbeon-Liferay-User-Email or Orbeon-Liferay-User-Full-Name are also possible -->
     <property as="xs:string"  name="oxf.fr.authentication.header.roles"                         value="My-Roles-Header"/>
     <property as="xs:string"  name="oxf.fr.authentication.header.roles.property-name"           value=""/>
     <property as="xs:string"  name="oxf.fr.authentication.container.roles"                      value="orbeon admin user"/>
@@ -70,6 +70,7 @@
     <property as="xs:string"  name="oxf.fr.detail.new.service.passing-request-parameters.*.*"   value=""/>
     <property as="xs:string"  name="oxf.fr.detail.buttons.*.*"                                  value="refresh close clear pdf email save workflow-review collapse-all expand-all"/>
     <property as="xs:string"  name="oxf.fr.detail.buttons.view.*.*"                             value="back workflow-edit pdf"/>
+    <property as="xs:boolean" name="oxf.fr.detail.captcha.*.*"                                  value="false"/>
     <property as="xs:boolean" name="oxf.fr.detail.submit.content-from-persistence.*.*"          value="false"/>
     <property as="xs:string"  name="oxf.fr.detail.submit.buttons.*.*"                           value="clear keep go close-window"/>
     <property as="xs:string"  name="oxf.fr.detail.submit.go.uri-xpath.*.*"                      value="/book/details/link"/>
@@ -101,7 +102,8 @@
     <property as="xs:boolean" name="oxf.fr.alfresco.send-pdf.*.*"                               value="false"/>
     <property as="xs:boolean" name="oxf.fr.alfresco.send-xml.*.*"                               value="false"/>
 
-    <!-- Configuration of demo forms -->
+    <!-- Configuration of built-in forms -->
+    <property as="xs:boolean" name="oxf.fr.detail.captcha.orbeon.builder"                       value="false"/>
     <property as="xs:string"  name="oxf.fr.persistence.provider.orbeon.builder.form"            value="resource"/>
     <property as="xs:string"  name="oxf.fr.persistence.provider.orbeon.bookshelf.form"          value="resource"/>
     <property as="xs:string"  name="oxf.fr.persistence.provider.orbeon.controls.form"           value="resource"/>

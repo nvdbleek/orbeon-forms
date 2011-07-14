@@ -25,7 +25,9 @@ import org.orbeon.oxf.xforms.control.XFormsControl;
 import org.orbeon.oxf.xforms.control.XFormsNoSingleNodeContainerControl;
 import org.orbeon.oxf.xforms.event.XFormsEvent;
 import org.orbeon.oxf.xforms.event.XFormsEvents;
-import org.orbeon.oxf.xforms.event.events.*;
+import org.orbeon.oxf.xforms.event.events.XXFormsDndEvent;
+import org.orbeon.oxf.xforms.event.events.XXFormsIndexChangedEvent;
+import org.orbeon.oxf.xforms.event.events.XXFormsNodesetChangedEvent;
 import org.orbeon.oxf.xforms.xbl.XBLContainer;
 import org.orbeon.saxon.om.Item;
 import org.orbeon.saxon.om.NodeInfo;
@@ -255,9 +257,12 @@ public class XFormsRepeatControl extends XFormsNoSingleNodeContainerControl {
 
         // Delete node from source
         // NOTE: don't dispatch event, because one call to updateRepeatNodeset() is enough
-        final List deletedNodes = XFormsDeleteAction.doDelete(containingDocument,
+        final NodeInfo deletedNodeInfo; {
+            // This deletes exactly one node
+            final List<XFormsDeleteAction.DeleteInfo> deleteInfos = XFormsDeleteAction.doDelete(containingDocument,
                 containingDocument.getControls().getIndentedLogger(), sourceNodeset, requestedSourceIndex, false);
-        final NodeInfo deletedNodeInfo = (NodeInfo) deletedNodes.get(0);
+            deletedNodeInfo = deleteInfos.get(0).nodeInfo;
+        }
 
         // Adjust destination collection to reflect new state
         final int deletedNodePosition = destinationNodeset.indexOf(deletedNodeInfo);
@@ -294,7 +299,7 @@ public class XFormsRepeatControl extends XFormsNoSingleNodeContainerControl {
         final NodeInfo insertContextNodeInfo = deletedNodeInfo.getParent();
         // NOTE: Tell insert to not clone the node, as we know it is ready for insertion
         XFormsInsertAction.doInsert(containingDocument, containingDocument.getControls().getIndentedLogger(),
-                destinationPosition, destinationNodeset, insertContextNodeInfo, deletedNodes, actualDestinationIndex, false, true);
+                destinationPosition, destinationNodeset, insertContextNodeInfo, Collections.singletonList(deletedNodeInfo), actualDestinationIndex, false, true);
 
         // TODO: should dispatch xxforms-move instead of xforms-insert?
     }
@@ -394,7 +399,7 @@ public class XFormsRepeatControl extends XFormsNoSingleNodeContainerControl {
             final int[] newIndexes = findNodeIndexes(oldRepeatItems, newRepeatNodeset);
 
             // Remove control information for iterations that move or just disappear
-            final List oldChildren = getChildren();
+            final List<XFormsControl> oldChildren = getChildren();
 
             for (int i = 0; i < newIndexes.length; i++) {
                 final int currentNewIndex = newIndexes[i];
@@ -411,7 +416,7 @@ public class XFormsRepeatControl extends XFormsNoSingleNodeContainerControl {
                         }
 
                         // Dispatch destruction events
-                        currentControlTree.dispatchDestructionEventsForRemovedIteration(movedOrRemovedIteration);
+                        currentControlTree.dispatchDestructionEventsForRemovedContainer(movedOrRemovedIteration, true);
 
                         // Indicate to iteration that it is being removed
                         movedOrRemovedIteration.iterationRemoved();
@@ -599,7 +604,7 @@ public class XFormsRepeatControl extends XFormsNoSingleNodeContainerControl {
                     final XFormsRepeatIterationControl removedIteration = (XFormsRepeatIterationControl) oldChildren.get(i);
 
                     // Dispatch destruction events
-                    currentControlTree.dispatchDestructionEventsForRemovedIteration(removedIteration);
+                    currentControlTree.dispatchDestructionEventsForRemovedContainer(removedIteration, true);
 
                     // Deindex old iteration
                     currentControlTree.deindexSubtree(removedIteration, true);

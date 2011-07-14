@@ -322,6 +322,12 @@ button.xforms-trigger img, .xforms-trigger button img { margin-right: 10px }
     margin-bottom: .25em;
 }
 
+.fr-captcha {
+    display: block;                             /* By default captcha is inline */
+    margin-left: 22px;                          /* Margin left to be aligned with fr-section-content */
+    margin-top: 1.5em; margin-bottom: 1em;      /* Spacing before and after */
+}
+
 .fr-section-title .xforms-help-image {
     float: none;
     vertical-align: middle
@@ -358,6 +364,7 @@ button.xforms-trigger img, .xforms-trigger button img { margin-right: 10px }
 }
 
 /* Restore defaults for controls within component */
+/* NOTE: A downside of this approach is that this can breaks CSS that sets display: none in the components, by overriding it with a stronger rule. */
 .fr-grid-content .xbl-component .xforms-control { display: inline; clear: none }
 html body .xforms-form .fr-grid-content .xbl-component .xforms-disabled-subsequent { display: none }
 html body .xforms-form .fr-grid-content .xbl-component .xforms-disabled {

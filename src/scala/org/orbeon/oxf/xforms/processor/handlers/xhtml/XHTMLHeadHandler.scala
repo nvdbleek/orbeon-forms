@@ -57,7 +57,7 @@ class XHTMLHeadHandler extends XHTMLHeadHandlerBase {
         // Output baseline resources with a CSS class
         allBaseline foreach (s => outputElement(Some(s), Some("xforms-baseline"), None))
 
-        val builtinUsed = LinkedHashSet(getBuiltin(containingDocument.getStaticOps) map (_.getResourcePath(minimal)): _*)
+        val builtinUsed = LinkedHashSet(getBuiltin(getContainingDocument().getStaticOps) map (_.getResourcePath(minimal)): _*)
         val xblUsed = LinkedHashSet(XHTMLHeadHandler.xblResourcesToSeq(getXBL): _*)
 
         // Output remaining resources if any, with no CSS class
@@ -79,8 +79,8 @@ class XHTMLHeadHandler extends XHTMLHeadHandlerBase {
 
         // Output all CSS
         outputResources(outputCSSElement, XFormsFeatures.getCSSResources,
-            containingDocument.getStaticOps.getXBLStyles,
-            containingDocument.getStaticOps.baselineResources._2, minimal)
+            getContainingDocument().getStaticOps.getXBLStyles,
+            getContainingDocument().getStaticOps.baselineResources._2, minimal)
     }
 
     override def outputJavaScriptResources(helper: ContentHandlerHelper, xhtmlPrefix: String, minimal: Boolean, attributesImpl: AttributesImpl) {
@@ -91,8 +91,8 @@ class XHTMLHeadHandler extends XHTMLHeadHandlerBase {
 
         // Output all JS
         outputResources(outputJSElement, XFormsFeatures.getJavaScriptResources,
-            containingDocument.getStaticOps.getXBLScripts,
-            containingDocument.getStaticOps.baselineResources._1, minimal)
+            getContainingDocument().getStaticOps.getXBLScripts,
+            getContainingDocument().getStaticOps.baselineResources._1, minimal)
     }
 }
 

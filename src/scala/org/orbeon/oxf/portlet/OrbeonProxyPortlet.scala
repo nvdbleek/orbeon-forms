@@ -36,11 +36,11 @@ class OrbeonProxyPortlet extends GenericPortlet {
 //    private val actions = Set("new", "summary")
 
     private val preferences = Map(
-        (PreferenceName.FormRunnerURL -> "Form Runner URL"),
-        (PreferenceName.AppName -> "Form Runner app name"),
-        (PreferenceName.FormName -> "Form Runner form name"),
-        (PreferenceName.Action -> "Form Runner action"),
-        (PreferenceName.ReadOnly -> "Read-Only access")
+        PreferenceName.FormRunnerURL -> "Form Runner URL",
+        PreferenceName.AppName -> "Form Runner app name",
+        PreferenceName.FormName -> "Form Runner form name",
+        PreferenceName.Action -> "Form Runner action",
+        PreferenceName.ReadOnly -> "Read-Only access"
     )
 
     // Return the value of the preference if set, otherwise the value of the initialization parameter
@@ -156,7 +156,7 @@ class OrbeonProxyPortlet extends GenericPortlet {
                     val is = connection.getInputStream
                     if (is ne null) is.close()
                 }
-            // POST of a resource, used for Ajax requests
+            // POST of a resource, used for Ajax requests, form posts, and uploads
             case "POST" =>
 
                 val connection = url.openConnection.asInstanceOf[HttpURLConnection]
@@ -170,7 +170,15 @@ class OrbeonProxyPortlet extends GenericPortlet {
                 connection.connect()
                 try {
                     // Write content
-                    Net.copyStream(request.getPortletInputStream, connection.getOutputStream)
+
+                    if (Net.getContentTypeMediaType(request.getContentType) == "application/xml") {
+                        // Strip namespace ids from content of Ajax request
+                        val content = Net.readStreamAsString(new InputStreamReader(request.getPortletInputStream, "utf-8"))
+                        connection.getOutputStream.write(content.replaceAllLiterally(response.getNamespace, "").getBytes("utf-8"))
+                    } else {
+                        // Just copy the stream
+                        Net.copyStream(request.getPortletInputStream, connection.getOutputStream)
+                    }
 
                     propagateHeaders(response, connection)
                     getRemoteSessionId(request, connection)
@@ -209,9 +217,9 @@ class OrbeonProxyPortlet extends GenericPortlet {
     private def propagateHeaders(response: MimeResponse, connection: HttpURLConnection): Unit =
         Seq("Content-Type", "Last-Modified", "Cache-Control") map
             (name => (name, connection.getHeaderField(name))) foreach {
-                case (name, value: String) => response.setProperty(name, value)
+                case ("Content-Type", value: String) => response.setContentType(value)
                 case ("Content-Type", null) => getPortletContext.log("WARNING: Received null Content-Type for URL: " + connection.getURL.toString)
-                case _ =>
+                case (name, value: String) => response.setProperty(name, value)
             }
 
     // If we know about the remote session id, set it on the connection to Form Runner

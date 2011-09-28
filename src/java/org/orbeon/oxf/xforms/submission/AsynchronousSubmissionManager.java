@@ -14,14 +14,14 @@
 package org.orbeon.oxf.xforms.submission;
 
 import org.orbeon.oxf.common.OXFException;
+import org.orbeon.oxf.externalcontext.AsyncExternalContext;
 import org.orbeon.oxf.pipeline.api.ExternalContext;
 import org.orbeon.oxf.pipeline.api.PipelineContext;
-import org.orbeon.oxf.util.*;
+import org.orbeon.oxf.util.IndentedLogger;
+import org.orbeon.oxf.util.NetUtils;
 import org.orbeon.oxf.xforms.XFormsContainingDocument;
 import org.orbeon.oxf.xforms.XFormsProperties;
 import org.orbeon.oxf.xforms.event.XFormsEvents;
-import org.orbeon.oxf.xforms.event.events.XXFormsSubmitReplaceEvent;
-import org.orbeon.oxf.xforms.xbl.XBLContainer;
 
 import java.util.Map;
 import java.util.concurrent.*;
@@ -92,7 +92,8 @@ public class AsynchronousSubmissionManager {
         // o OR provide an explicit hint on xf:submission
         asynchronousSubmissions.submit(new Callable<SubmissionResult>() {
 
-            final ExternalContext externalContext = NetUtils.getExternalContext();
+            // Submission should not need an ExternalContext, but if it does we must provide access to a safe one
+            final ExternalContext externalContext = new AsyncExternalContext(NetUtils.getExternalContext().getRequest(), NetUtils.getExternalContext().getResponse());
             public SubmissionResult call() throws Exception {
                 // Make sure an ExternalContext is scoped for the callable. We use the same external context as the caller,
                 // even though that can be a dangerous. Should we use AsyncExternalContext here?
@@ -140,9 +141,7 @@ public class AsynchronousSubmissionManager {
 
                         // Process response by dispatching an event to the submission
                         final XFormsModelSubmission submission = (XFormsModelSubmission) containingDocument.getObjectByEffectiveId(result.getSubmissionEffectiveId());
-                        final XBLContainer container = submission.getXBLContainer(containingDocument);
-                        // NOTE: not clear whether we should use an event for this as there doesn't seem to be a benefit
-                        container.dispatchEvent(new XXFormsSubmitReplaceEvent(containingDocument, submission, result));
+                        submission.doSubmitReplace(result);
 
                     } catch (Throwable throwable) {
                         // Something bad happened
@@ -181,9 +180,7 @@ public class AsynchronousSubmissionManager {
 
                         // Process response by dispatching an event to the submission
                         final XFormsModelSubmission submission = (XFormsModelSubmission) containingDocument.getObjectByEffectiveId(result.getSubmissionEffectiveId());
-                        final XBLContainer container = submission.getXBLContainer(containingDocument);
-                        // NOTE: not clear whether we should use an event for this as there doesn't seem to be a benefit
-                        container.dispatchEvent(new XXFormsSubmitReplaceEvent(containingDocument, submission, result));
+                        submission.doSubmitReplace(result);
                     } catch (Throwable throwable) {
                         // Something bad happened
                         throw new OXFException(throwable);

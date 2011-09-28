@@ -17,7 +17,6 @@ import org.dom4j.*;
 import org.orbeon.oxf.cache.OutputCacheKey;
 import org.orbeon.oxf.common.OXFException;
 import org.orbeon.oxf.common.ValidationException;
-import org.orbeon.oxf.debugger.api.*;
 import org.orbeon.oxf.pipeline.api.PipelineContext;
 import org.orbeon.oxf.pipeline.api.XMLReceiver;
 import org.orbeon.oxf.processor.*;
@@ -31,7 +30,9 @@ import org.orbeon.oxf.processor.pipeline.foreach.ConcreteForEachProcessor;
 import org.orbeon.oxf.resources.URLFactory;
 import org.orbeon.oxf.util.PipelineUtils;
 import org.orbeon.oxf.xml.SchemaRepository;
-import org.orbeon.oxf.xml.dom4j.*;
+import org.orbeon.oxf.xml.dom4j.Dom4jUtils;
+import org.orbeon.oxf.xml.dom4j.ExtendedLocationData;
+import org.orbeon.oxf.xml.dom4j.LocationData;
 
 import java.net.MalformedURLException;
 import java.util.*;
@@ -58,7 +59,7 @@ import java.util.*;
  * read multiple times and get the same result. Only the first call to read
  * on the data output will succeed.
  */
-public class PipelineProcessor extends ProcessorImpl implements Debuggable {
+public class PipelineProcessor extends ProcessorImpl {
 
     public static final String PIPELINE_NAMESPACE_URI = "http://www.orbeon.com/oxf/pipeline";
     public static final Namespace PIPELINE_NAMESPACE = new Namespace("p", PIPELINE_NAMESPACE_URI);
@@ -151,11 +152,6 @@ public class PipelineProcessor extends ProcessorImpl implements Debuggable {
             }
         };
         addOutput(name, output);
-        final BreakpointKey bptKey
-            = configFromAST == null ? null : configFromAST.getOutputBreakpointKey( name );
-        if ( bptKey != null ) {
-            output.setBreakpointKey( bptKey );
-        }
         return output;
     }
 
@@ -242,11 +238,6 @@ public class PipelineProcessor extends ProcessorImpl implements Debuggable {
                     if ( id == null && ref == null )
                         throw new OXFException("Either one of id or ref must be specified on output " + nm );
 
-                    final LocationData locDat = output.getLocationData();
-                    final BreakpointKey bptKey
-                        = locDat == null ? null : new BreakpointKey( locDat );
-                    if ( bptKey != null ) config.setOutputBreakpointKey( id == null ? ref : id, bptKey );
-
                     ProcessorOutput pout = processor.createOutput( nm );
                     if ( id != null)
                         block.declareOutput(output.getNode(), id, pout);
@@ -254,7 +245,6 @@ public class PipelineProcessor extends ProcessorImpl implements Debuggable {
                         block.connectProcessorToBottomInput
                                 (output.getNode(), nm, ref, pout);
                     setDebugAndSchema(pout, output);
-                    setBreakpointKey(pout, output);
                 }
 
                 // Make sure at least one of the outputs is connected
@@ -341,7 +331,6 @@ public class PipelineProcessor extends ProcessorImpl implements Debuggable {
                         }
                     }
                     setDebugAndSchema(pin, input);
-                    setBreakpointKey(pin, input);
                 }
 
             } else if (statement instanceof ASTChoose) {
@@ -544,14 +533,6 @@ public class PipelineProcessor extends ProcessorImpl implements Debuggable {
         }
     }
 
-    private static void setBreakpointKey(ProcessorInputOutput processorInputOutput, ASTNodeContainer nodeContainer) {
-        LocationData locationData = nodeContainer.getLocationData();
-
-        // Only set if there is a chance we can match on it later
-        if (locationData != null && locationData.getSystemID() != null && locationData.getLine() != -1 )
-            processorInputOutput.setBreakpointKey(new BreakpointKey(locationData));
-    }
-
     /**
      * "Artificial" output sitting at the "top" of the pipeline to which the "top processors" are connected.
      */
@@ -672,30 +653,10 @@ public class PipelineProcessor extends ProcessorImpl implements Debuggable {
         setState(context, new State());
     }
 
-//    /**
-//     * FIXME - We can't really do this until we have the config. The way we
-//     * implement this is going to change when we introduce abstract processors.
-//     */
-//    public void checkSockets() {
-//        // nop
-//    }
-
     private static class State {
         public Map<String, ProcessorInput> nameToBottomInputMap = new HashMap<String, ProcessorInput>();
         public boolean started = false;
         public Map<String, List<ProcessorInput>> pipelineInputs = new HashMap<String, List<ProcessorInput>>();
-    }
-
-    private List breakpoints;
-
-    public void addBreakpoint(Breakpoint breakpoint) {
-        if (breakpoints == null)
-            breakpoints = new ArrayList();
-        breakpoints.add(breakpoint);
-    }
-
-    public List getBreakpoints() {
-        return breakpoints;
     }
 
     private void addSelfAsParent(PipelineContext pipelineContext) {

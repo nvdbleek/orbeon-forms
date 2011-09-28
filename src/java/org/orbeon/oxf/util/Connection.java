@@ -13,6 +13,7 @@
  */
 package org.orbeon.oxf.util;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.http.client.CookieStore;
 import org.apache.log4j.Level;
 import org.orbeon.oxf.common.OXFException;
@@ -36,13 +37,8 @@ import java.util.*;
 public class Connection {
 
     // NOTE: Could add a distinction for portlet session scope.
-    public enum StateScope {
-        NONE, REQUEST, SESSION, APPLICATION
-    }
-
-    public enum Method {
-        GET, PUT, POST
-    }
+    public enum StateScope { NONE, REQUEST, SESSION, APPLICATION }
+    public enum Method { GET, PUT, POST }
 
     public static final String AUTHORIZATION_HEADER = "Authorization";
 
@@ -50,12 +46,26 @@ public class Connection {
     private static final String LOG_TYPE = "connection";
 
     public static final String HTTP_FORWARD_HEADERS_PROPERTY = "oxf.http.forward-headers";
+    public static final String HTTP_FORWARD_COOKIES_PROPERTY = "oxf.http.forward-cookies";
 
     public static final String HTTP_STATE_PROPERTY = "oxf.http.state";
     private static final String HTTP_COOKIE_STORE_ATTRIBUTE = "oxf.http.cookie-store";
 
-    private CookieStore cookieStore;
     private final StateScope stateScope = getStateScope();
+
+    private CookieStore cookieStore;
+
+    private boolean isHTTPOrHTTPS;
+    private IndentedLogger indentedLogger;
+    private boolean logBody;
+    private String httpMethod;
+    private URL connectionURL;
+    private String username;
+    private String password;
+    private String domain;
+    String contentType;
+    private byte[] messageBody;
+    private Map<String, String[]> headersMap;
 
     /**
      * Perform a connection to the given URL with the given parameters.
@@ -76,32 +86,54 @@ public class Connection {
 
         indentedLogger.startHandleOperation(LOG_TYPE, "opening connection");
         try {
-            final boolean isHTTPOrHTTPS = isHTTPOrHTTPS(connectionURL.getProtocol());
-
-            // Caller might pass null here
-            if (headerNameValues == null)
-                headerNameValues = Collections.emptyMap();
-
-            // Get state if possible
-            if (isHTTPOrHTTPS)
-                loadHttpState(externalContext, indentedLogger);
-
-            // Get  the headers to forward if any
-            final Map<String, String[]> headersMap = (externalContext.getRequest() != null) ?
-                    getHeadersMap(externalContext, indentedLogger, username, headerNameValues, headersToForward) : headerNameValues;
-
-            // Open the connection
-            final ConnectionResult result = connect(indentedLogger, logBody, httpMethod, connectionURL, username, password, domain, contentType, messageBody, headersMap);
-
-            // Save state if possible
-            if (isHTTPOrHTTPS)
-                saveHttpState(externalContext, indentedLogger);
+            // Prepare, connect, and cleanup
+            prepare(externalContext, indentedLogger, logBody, httpMethod, connectionURL, username, password, domain, contentType, messageBody, headerNameValues, headersToForward, true);
+            final ConnectionResult result = connect();
+            cleanup(externalContext, true);
 
             return result;
         } finally {
             // In case an exception is thrown in the body, still do adjust the logs
             indentedLogger.endHandleOperation();
         }
+    }
+
+    public Connection prepare(ExternalContext externalContext, IndentedLogger indentedLogger, boolean logBody,
+                              String httpMethod, final URL connectionURL, String username, String password, String domain,
+                              String contentType, byte[] messageBody, Map<String, String[]> headerNameValues,
+                              String headersToForward, boolean handleState) {
+
+        isHTTPOrHTTPS = isHTTPOrHTTPS(connectionURL.getProtocol());
+
+        // Caller might pass null here
+        if (headerNameValues == null)
+            headerNameValues = Collections.emptyMap();
+
+        // Get state if possible
+        if (handleState && isHTTPOrHTTPS)
+            loadHttpState(externalContext, indentedLogger);
+
+        this.indentedLogger = indentedLogger;
+        this.logBody = logBody;
+        this.httpMethod = httpMethod;
+        this.connectionURL = connectionURL;
+        this.username = username;
+        this.password = password;
+        this.domain = domain;
+        this.contentType = contentType;
+        this.messageBody = messageBody;
+
+        // Get  the headers to forward if any
+        headersMap = (externalContext.getRequest() != null) ?
+                getHeadersMap(externalContext, indentedLogger, username, headerNameValues, headersToForward) : headerNameValues;
+
+        return this;
+    }
+
+    public void cleanup(ExternalContext externalContext, boolean handleState) {
+        // Save state if possible
+        if (handleState && isHTTPOrHTTPS)
+            saveHttpState(externalContext, indentedLogger);
     }
 
     /**
@@ -113,14 +145,17 @@ public class Connection {
      * o a list of headers to forward
      *
      * @param externalContext   context
-     * @param indentedLogger    logger
-     * @param username          username
-     * @param headerNameValues  LinkedHashMap<String headerName, String[] headerValues>
-     * @param headersToForward  headers to forward
+     * @param indentedLogger    logger or null
+     * @param username          username or null
+     * @param headerNameValues  LinkedHashMap<String headerName, String[] headerValues> or null
+     * @param headersToForward  headers to forward or null
      * @return LinkedHashMap<String headerName, String[] headerValues>
      */
-    private static Map<String, String[]> getHeadersMap(ExternalContext externalContext, IndentedLogger indentedLogger, String username,
+    public static Map<String, String[]> getHeadersMap(ExternalContext externalContext, IndentedLogger indentedLogger, String username,
                                     Map<String, String[]> headerNameValues, String headersToForward) {
+
+        final boolean doLog = (indentedLogger != null && indentedLogger.isDebugEnabled());
+
         // Resulting header names and values to set
         final LinkedHashMap<String, String[]> headersMap = new LinkedHashMap<String, String[]>();
 
@@ -128,20 +163,23 @@ public class Connection {
         final Map<String, String> headersToForwardMap = getHeadersToForward(headersToForward);
 
         // Set headers if provided
-        if (headerNameValues.size() > 0) {
+        if (headerNameValues != null && headerNameValues.size() > 0) {
             for (final Map.Entry<String, String[]> currentEntry: headerNameValues.entrySet()) {
                 final String currentHeaderName = currentEntry.getKey();
+                final String currentHeaderNameLowercase = currentHeaderName.toLowerCase();
                 final String[] currentHeaderValues = currentEntry.getValue();
                 // Set header
-                headersMap.put(currentHeaderName, currentHeaderValues);
+                headersMap.put(currentHeaderNameLowercase, currentHeaderValues);
                 // Remove from list of headers to forward below
                 if (headersToForwardMap != null)
-                    headersToForwardMap.remove(currentHeaderName.toLowerCase());
+                    headersToForwardMap.remove(currentHeaderNameLowercase);
             }
         }
 
         // Forward cookies for session handling
-        if (username == null) {
+        // NOTE: We use a property, as some app servers like WebLogic allow configuring the session cookie name.
+        final String[] cookiesToForward = getForwardCookies();
+        if (username == null && cookiesToForward.length > 0) {
 
             // NOTES 2011-01-22:
             //
@@ -162,9 +200,12 @@ public class Connection {
 
             // START "NEW" 2009 ALGORITHM
 
+            // By convention, the first cookie name is the session cookie
+            final String sessionCookieName = cookiesToForward[0];
+
             // 1. If there is an incoming JSESSIONID cookie, use it. The reason is that there is not necessarily an
             // obvious mapping between "session id" and JSESSIONID cookie value. With Tomcat, this works, but with e.g.
-            // Websphere, you get session id="foobar" and JSESSIONID=0000foobar:-1. So we must first try to get the
+            // WebSphere, you get session id="foobar" and JSESSIONID=0000foobar:-1. So we must first try to get the
             // incoming JSESSIONID. To do this, we get the cookie, then serialize it as a header.
 
             // TODO: ExternalContext must provide direct access to cookies
@@ -191,14 +232,14 @@ public class Connection {
                     }
 
                     if (forwardSessionCookies) {
-                        for (final Cookie cookie: cookies) {
-                            // This is the standard JSESSIONID cookie
-                            final boolean isJSessionId = cookie.getName().equals("JSESSIONID");
-                            // Remember if we've seen JSESSIONID
-                                sessionCookieSet |= isJSessionId;
 
-                            // Forward JSESSIONID and JSESSIONIDSSO for JBoss
-                            if (isJSessionId || cookie.getName().equals("JSESSIONIDSSO")) {
+                        final List<String> cookiesToForwardAsList = Arrays.asList(cookiesToForward);
+
+                        for (final Cookie cookie: cookies) {
+                            // Remember if we've seen the session cookie
+                            sessionCookieSet |= cookie.getName().equals(sessionCookieName);
+
+                            if (cookiesToForwardAsList.contains(cookie.getName())) {
                                 // Multiple cookies in the header, separated with ";"
                                 if (sb.length() > 0)
                                     sb.append("; ");
@@ -212,16 +253,17 @@ public class Connection {
                         if (sb.length() > 0) {
                             // One or more cookies were set
                             final String cookieString = sb.toString();
-                            indentedLogger.logDebug(LOG_TYPE, "forwarding cookies",
-                                    "cookie", cookieString,
-                                    "requested session id", externalContext.getRequest().getRequestedSessionId());
-                            StringConversions.addValueToStringArrayMap(headersMap, "Cookie", cookieString );
+                            if (doLog)
+                                indentedLogger.logDebug(LOG_TYPE, "forwarding cookies",
+                                        "cookie", cookieString,
+                                        "requested session id", externalContext.getRequest().getRequestedSessionId());
+                            StringConversions.addValueToStringArrayMap(headersMap, "cookie", cookieString );
                         }
                     }
                 }
             }
 
-            // 2. If there is no incoming JSESSIONID cookie, try to make our own cookie. This may fail with e.g.
+            // 2. If there is no incoming session cookie, try to make our own cookie. This may fail with e.g.
             // WebSphere.
             if (!sessionCookieSet) {
                 final ExternalContext.Session session = externalContext.getSession(false);
@@ -229,15 +271,16 @@ public class Connection {
                 if (session != null) {
 
                     // This will work with Tomcat, but may not work with other app servers
-                    StringConversions.addValueToStringArrayMap(headersMap, "Cookie", "JSESSIONID=" + session.getId());
+                    StringConversions.addValueToStringArrayMap(headersMap, "cookie", sessionCookieName + "=" + session.getId());
 
-                    if (indentedLogger.isDebugEnabled()) {
+                    // All this is for logging!
+                    if (doLog) {
 
                         String incomingSessionHeader = null;
-                        final String[] cookieHeaders = externalContext.getRequest(   ).getHeaderValuesMap().get("cookie");
+                        final String[] cookieHeaders = externalContext.getRequest().getHeaderValuesMap().get("cookie");
                         if (cookieHeaders != null) {
                             for (final String cookie: cookieHeaders) {
-                                if (cookie.indexOf("JSESSIONID") != -1) {
+                                if (cookie.indexOf(sessionCookieName) != -1) {
                                     incomingSessionHeader = cookie;
                                 }
                             }
@@ -248,7 +291,7 @@ public class Connection {
                             final Cookie[] cookies = ((HttpServletRequest) externalContext.getNativeRequest()).getCookies();
                             if (cookies != null) {
                                 for (final Cookie cookie: cookies) {
-                                    if (cookie.getName().equals("JSESSIONID")) {
+                                    if (cookie.getName().equals(sessionCookieName)) {
                                         incomingSessionCookie = cookie.getValue();
                                     }
                                 }
@@ -259,8 +302,9 @@ public class Connection {
                                 "new session", Boolean.toString(session.isNew()),
                                 "session id", session.getId(),
                                 "requested session id", externalContext.getRequest().getRequestedSessionId(),
-                                "incoming JSESSIONID cookie", incomingSessionCookie,
-                                "incoming JSESSIONID header", incomingSessionHeader);
+                                "session cookie name", sessionCookieName,
+                                "incoming session cookie", incomingSessionCookie,
+                                "incoming session header", incomingSessionHeader);
                     }
                 }
             }
@@ -269,7 +313,7 @@ public class Connection {
         }
 
         // Forward headers if needed
-        // NOTE: Forwarding the "Cookie" header may yield unpredictable results because of the above work done w/ JSESSIONID
+        // NOTE: Forwarding the "Cookie" header may yield unpredictable results because of the above work done w/ session cookies
         if (headersToForwardMap != null) {
 
             final Map<String, String[]> requestHeaderValuesMap = externalContext.getRequest().getHeaderValuesMap();
@@ -285,13 +329,15 @@ public class Connection {
                     final boolean isAuthorizationHeader = currentHeaderNameLowercase.equalsIgnoreCase(Connection.AUTHORIZATION_HEADER);
                     if (!isAuthorizationHeader || isAuthorizationHeader && username == null) {
                         // Only forward Authorization header if there is no username provided
-                        indentedLogger.logDebug(LOG_TYPE, "forwarding header",
-                                "name", currentHeaderName, "value", currentIncomingHeaderValues.toString());
-                        StringConversions.addValuesToStringArrayMap(headersMap, currentHeaderName, currentIncomingHeaderValues);
+                        if (doLog)
+                            indentedLogger.logDebug(LOG_TYPE, "forwarding header",
+                                    "name", currentHeaderNameLowercase, "value", StringUtils.join(currentIncomingHeaderValues, ' '));
+                        StringConversions.addValuesToStringArrayMap(headersMap, currentHeaderNameLowercase, currentIncomingHeaderValues);
                     } else {
                         // Just log this information
-                        indentedLogger.logDebug(LOG_TYPE,
-                                "not forwarding Authorization header because username is present");
+                        if (doLog)
+                            indentedLogger.logDebug(LOG_TYPE,
+                                    "not forwarding Authorization header because username is present");
                     }
                 }
             }
@@ -301,6 +347,9 @@ public class Connection {
     }
 
     private void loadHttpState(ExternalContext externalContext, IndentedLogger indentedLogger) {
+
+        // NOTE: BasicCookieStore is @ThreadSafe
+
         switch (stateScope) {
             case REQUEST:
                 cookieStore = (CookieStore) externalContext.getRequest().getAttributesMap().get(HTTP_COOKIE_STORE_ATTRIBUTE);
@@ -357,20 +406,9 @@ public class Connection {
     /**
      * Open the connection. This sends request headers, request body, and reads status and response headers.
      *
-     * @param indentedLogger    logger
-     * @param logBody           whether the request/response body must be logged
-     * @param httpMethod        method i.e. GET, etc.
-     * @param connectionURL     URL to connect to
-     * @param username          username or null
-     * @param password          password or null
-     * @param contentType       content type for POST and PUT
-     * @param messageBody       request body for POST and PUT
-     * @param headersMap        LinkedHashMap<String headerName, String[] headerValues> headers to set
      * @return                  connection result
      */
-    private ConnectionResult connect(IndentedLogger indentedLogger, boolean logBody,
-                                     String httpMethod, final URL connectionURL, String username, String password,
-                                     String domain, String contentType, byte[] messageBody, Map<String, String[]> headersMap) {
+    public ConnectionResult connect() {
 
         final boolean isDebugEnabled = indentedLogger.isDebugEnabled();
 
@@ -656,7 +694,7 @@ public class Connection {
      * @param headersToForward  space-separated list of headers to forward
      * @return  Map<String, String> lowercase header name to user-specified header name or null if null String passed
      */
-    private static Map<String, String> getHeadersToForward(String headersToForward) {
+    public static Map<String, String> getHeadersToForward(String headersToForward) {
         if (headersToForward == null)
             return null;
 
@@ -692,5 +730,10 @@ public class Connection {
     public static String getForwardHeaders() {
         final PropertySet propertySet = org.orbeon.oxf.properties.Properties.instance().getPropertySet();
         return propertySet.getString(HTTP_FORWARD_HEADERS_PROPERTY, "");
+    }
+    public static String[] getForwardCookies() {
+        final PropertySet propertySet = org.orbeon.oxf.properties.Properties.instance().getPropertySet();
+        final String stringValue = propertySet.getString(HTTP_FORWARD_COOKIES_PROPERTY, "JSESSIONID JSESSIONIDSSO");
+        return org.apache.commons.lang.StringUtils.split(stringValue);
     }
 }

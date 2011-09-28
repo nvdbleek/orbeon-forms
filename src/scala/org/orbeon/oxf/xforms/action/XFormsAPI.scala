@@ -20,14 +20,21 @@ import org.orbeon.saxon.om._
 import java.util.{List => JList}
 import org.orbeon.scaxon.XML._
 import org.w3c.dom.Node.{ELEMENT_NODE, ATTRIBUTE_NODE}
-import org.dom4j.QName
 import java.lang.IllegalStateException
 import org.orbeon.oxf.xforms.xbl.XBLContainer
+import org.orbeon.oxf.xforms.event.{XFormsEventObserver, XFormsEvent}
+import org.dom4j.{Element, QName}
 
 object XFormsAPI {
 
     // Dynamically set action context
     val actionContext = new DynamicVariable[Option[XFormsActionInterpreter]](None)
+
+    // Helper for Java side of things
+    def scalaActionJava(actionInterpreter: XFormsActionInterpreter, event: XFormsEvent, eventObserver: XFormsEventObserver, eventHandlerElement: Element) =
+        scalaAction(actionInterpreter) {
+            actionInterpreter.runAction(event, eventObserver, eventHandlerElement)
+        }
 
     // Every block of action must be run within this
     def scalaAction(actionInterpreter: XFormsActionInterpreter)(body: => Any) {
@@ -87,7 +94,7 @@ object XFormsAPI {
 
         if (oldName != newName) {
             val newNodeInfo = nodeInfo.getNodeKind match {
-                case ELEMENT_NODE => elementInfo(newName, nodeInfo \ *) // TODO: This only copies over the children elements. Must copy all nodes!
+                case ELEMENT_NODE => elementInfo(newName, (nodeInfo \@ @*) ++ (nodeInfo \ node))
                 case ATTRIBUTE_NODE =>  attributeInfo(newName, attValueOption(nodeInfo).get)
                 case _ => throw new IllegalArgumentException
             }
@@ -98,18 +105,27 @@ object XFormsAPI {
     }
 
     // Move the given element before another element
-    def moveElementBefore(element: NodeInfo, other: NodeInfo) {
-        insert(into = element.parent.get, before = other, origin = element)
+    def moveElementBefore(element: NodeInfo, other: NodeInfo) = {
+        val inserted = insert(into = element.parent.get, before = other, origin = element)
         delete(element)
+        inserted.head
     }
 
     // Move the given element after another element
-    def moveElementAfter(element: NodeInfo, other: NodeInfo) {
-        insert(into = element.parent.get, after = other, origin = element)
+    def moveElementAfter(element: NodeInfo, other: NodeInfo) = {
+        val inserted = insert(into = element.parent.get, after = other, origin = element)
         delete(element)
+        inserted.head
     }
 
-    // Set an attribute value, creating it if missing, updating it if presenty
+    // Move the given element into another element as the last element
+    def moveElementIntoAsLast(element: NodeInfo, other: NodeInfo) = {
+        val inserted = insert(into = other, after = other \ *, origin = element)
+        delete(element)
+        inserted.head
+    }
+
+    // Set an attribute value, creating it if missing, updating it if present
     // NOTE: This should be implemented as an optimization of the XForms insert action.
     // @return the new or existing attribute node
     // NOTE: Would be nice to return attribute (new or existing), but doInsert() is not always able to wrap the inserted

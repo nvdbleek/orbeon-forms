@@ -954,6 +954,7 @@ var DEFAULT_LOADING_TEXT = "Loading...";
                 this.xhtmlLayout = new ORBEON.util.Property("xhtml-layout", "nospan");
                 this.retryDelayIncrement = new ORBEON.util.Property("retry.delay-increment", 5000);
                 this.retryMaxDelay = new ORBEON.util.Property("retry.max-delay", 30000);
+                this.useARIA = new ORBEON.util.Property("use-aria", false);
             }
         },
 
@@ -1000,13 +1001,13 @@ var DEFAULT_LOADING_TEXT = "Loading...";
             },
 
             /**
-             * For the initial overlays (error dialog, loading indicator, message), which don't contains any XForms
-             * markup that relies on the container being rendered on the page to initialize, we want the overlay
-             * to be really hidden so it doesn't constrain how wide or high our browser needs to be.
+             * See: http://wiki.orbeon.com/forms/projects/ui/mobile-and-tablet-support#TOC-Problem-and-solution
              */
             overlayUseDisplayHidden: function(overlay) {
                 YD.setStyle(overlay.element, "display", "none");
-                overlay.beforeShowEvent.subscribe(function() { YD.setStyle(overlay.element, "display", "block"); });
+                // For why use subscribers.unshift instead of subscribe, see:
+                // http://wiki.orbeon.com/forms/projects/ui/mobile-and-tablet-support#TOC-Avoiding-scroll-when-showing-a-mess
+                overlay.beforeShowEvent.subscribers.unshift(new YAHOO.util.Subscriber(function() { YD.setStyle(overlay.element, "display", "block"); }));
                 overlay.beforeHideEvent.subscribe(function() { YD.setStyle(overlay.element, "display", "none"); });
             },
 
@@ -1326,6 +1327,21 @@ var DEFAULT_LOADING_TEXT = "Loading...";
                     }, function() {
                         if (testTuple[1]) testTuple[1].call(testCase);
                         ORBEON.util.Test.executeSequenceCausingAjaxRequest(testCase, tests);
+                    });
+                }
+            },
+
+            /**
+             * Take a sequence a function, and returns a function(testCase, next). If a function in the sequence
+             * invokes and XHR, then the following function will only run when that XHR finished.
+             */
+            runMayCauseXHR: function(testCase, continuations) {
+                if (continuations.length > 0) {
+                    var continuation = continuations.shift();
+                    ORBEON.util.Test.executeCausingAjaxRequest(testCase, function() {
+                        continuation.call(testCase);
+                    }, function() {
+                        ORBEON.util.Test.runMayCauseXHR(testCase, continuations);
                     });
                 }
             },
@@ -3449,6 +3465,14 @@ ORBEON.xforms.Events = {
 
             // Iterate on ancestors, stop when we don't find ancestors anymore or we arrive at the form element
             while (node != null && ! (ORBEON.util.Dom.isElement(node) && node.tagName.toLowerCase() == "form")) {
+
+                // First check clickable group
+                if (YAHOO.util.Dom.hasClass(node, "xforms-activable")) {
+                    var event = new ORBEON.xforms.server.AjaxServer.Event(form, node.id, null, null, "DOMActivate");
+                    ORBEON.xforms.server.AjaxServer.fireEvents([event]);
+                    break;
+                }
+
                 // Iterate on previous siblings
                 var delimiterCount = 0;
                 var foundRepeatBegin = false;
@@ -4236,6 +4260,12 @@ ORBEON.xforms.Init = {
                                     ORBEON.xforms.Globals.formDynamicState[formID].value);
                             ORBEON.xforms.Document.storeInClientState(formID, "uuid",
                                     ORBEON.xforms.Globals.formUUID[formID].value);
+                        } else {
+                            // The user reloaded or navigated back to this page. Reset the value of the $uuid field to
+                            // the value found in the client state, because the browser sometimes restores the value of
+                            // hidden fields in an erratic way, for example from the value the hidden field had from
+                            // the same URL loaded in another tab (e.g. Chrome, Firefox).
+                            ORBEON.xforms.Globals.formUUID[formID].value = ORBEON.xforms.Document.getFromClientState(formID, "uuid");
                         }
                     } else if (element.name.indexOf("$repeat-tree") != -1) {
                         xformsRepeatTree = element;
@@ -4697,7 +4727,7 @@ ORBEON.xforms.Init = {
                 fixedcenter: false,
                 constraintoviewport: true,
                 underlay: "none",
-                usearia: true,
+                usearia: ORBEON.util.Properties.useARIA.get(),
                 role: "" // See bug 315634 http://goo.gl/54vzd
             });
             // Close the dialog when users click on document
@@ -4712,7 +4742,7 @@ ORBEON.xforms.Init = {
                 fixedcenter: false,
                 constraintoviewport: true,
                 underlay: "none", // Similarly, setting the underlay to "shadow" conflicts with the CSS used to limit the width and height of the dialog on IE6
-                usearia: true,
+                usearia: ORBEON.util.Properties.useARIA.get(),
                 role: "" // See bug 315634 http://goo.gl/54vzd
             });
 			yuiDialog.showEvent.subscribe(ORBEON.xforms.Events.dialogShow, dialog.id);

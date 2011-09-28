@@ -113,6 +113,7 @@ public class XFormsProperties {
     public static final String XHTML_LAYOUT = "xhtml-layout";
     public static final String RETRY_DELAY_INCREMENT = "retry.delay-increment";
     public static final String RETRY_MAX_DELAY = "retry.max-delay";
+    public static final String USE_ARIA = "use-aria";
 
     public static final String XFORMS11_SWITCH_PROPERTY = "xforms11-switch";
 
@@ -235,6 +236,7 @@ public class XFormsProperties {
             new PropertyDefinition(XHTML_LAYOUT, XHTMLLayout.NOSPAN.toString().toLowerCase(), true),
             new PropertyDefinition(RETRY_DELAY_INCREMENT, 5000, true),
             new PropertyDefinition(RETRY_MAX_DELAY, 30000, true),
+            new PropertyDefinition(USE_ARIA, false, true),
             new PropertyDefinition(SESSION_HEARTBEAT_PROPERTY, true, true),
             new PropertyDefinition(SESSION_HEARTBEAT_DELAY_PROPERTY, 12 * 60 * 60 * 800, true), // dynamic; 80 % of 12 hours in ms
             new PropertyDefinition(DELAY_BEFORE_INCREMENTAL_REQUEST_PROPERTY, 500, true),
@@ -557,6 +559,21 @@ public class XFormsProperties {
             return result;
         else
             return Connection.getForwardHeaders();
+    }
+
+    public static String getForwardSubmissionHeaders(XFormsContainingDocument containingDocument, boolean forwardUserAgent) {
+        // NOTE about headers forwarding: forwarding the user agent makes sense when dealing with resources that typically
+        // would come from the client browser, including:
+        //
+        // o submission with replace="all"
+        // o dynamic resources loaded by xforms:output
+        //
+        // Also useful when the target URL renders XForms in noscript mode, where some browser sniffing takes
+        // place for handling the <button> vs. <submit> element.
+        final String forwardSubmissionHeaders = XFormsProperties.getForwardSubmissionHeaders(containingDocument).trim().toLowerCase();
+        return forwardUserAgent
+                ? (forwardSubmissionHeaders.length() == 0 ? "" : forwardSubmissionHeaders + " ") + "user-agent"
+                : forwardSubmissionHeaders;
     }
 
     public static int getSubmissionPollDelay(XFormsContainingDocument containingDocument) {

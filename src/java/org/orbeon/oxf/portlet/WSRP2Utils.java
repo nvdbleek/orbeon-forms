@@ -19,9 +19,7 @@ import org.orbeon.oxf.util.NetUtils;
 import org.orbeon.oxf.util.StringConversions;
 
 import javax.portlet.*;
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.io.Writer;
+import java.io.*;
 import java.net.URLDecoder;
 import java.util.Map;
 import java.util.TreeMap;
@@ -34,10 +32,6 @@ import java.util.regex.Pattern;
  */
 public class WSRP2Utils {
 
-    public static String encodeNamespacePrefix() {
-        return WSRPURLRewriter.PREFIX_TAG;
-    }
-
     /**
      * This method parses a string containing WSRP Consumer URL and namespace encoding and encode the URLs and namespaces
      * as per the Portlet API.
@@ -49,6 +43,9 @@ public class WSRP2Utils {
         int currentIndex = 0;
         int index;
         Writer writer = response.getWriter();
+
+        final String namespace = response.getNamespace().replace(' ', '_');// replacement probably because at some point Liferay was allowing spaces in namespace
+
         while ((index = content.indexOf(WSRPURLRewriter.BASE_TAG, currentIndex)) != -1) {
             // Write up to the current mark
             writer.write(content, currentIndex, index - currentIndex);
@@ -77,7 +74,7 @@ public class WSRP2Utils {
 
             } else if (index < stringLength - WSRPURLRewriter.BASE_TAG_LENGTH && content.charAt(index + WSRPURLRewriter.BASE_TAG_LENGTH) == '_') {
                 // Namespace encoding
-                writer.write(response.getNamespace());
+                writer.write(namespace);
                 currentIndex = index + WSRPURLRewriter.PREFIX_TAG_LENGTH;
             } else {
                 throw new OXFException("Invalid wsrp rewrite tagging.");
@@ -117,9 +114,14 @@ public class WSRP2Utils {
                 matcherEnd = matcher.end();
                 try {
                     // Group 0 is the whole match, e.g. a=b, while group 1 is the first group
-                    // denoted ( with parens ) in the expression.  Hence we start with group 1.
-                    final String name = URLDecoder.decode(matcher.group(1), STANDARD_PARAMETER_ENCODING);
+                    // denoted (with parens) in the expression. Hence we start with group 1.
+                    String name = URLDecoder.decode(matcher.group(1), STANDARD_PARAMETER_ENCODING);
                     final String value = URLDecoder.decode(matcher.group(2), STANDARD_PARAMETER_ENCODING);
+
+                    // Handle the case where the source contains &amp;amp; because of double escaping which does occur in
+                    // full Ajax updates!
+                    if (acceptAmp && name.startsWith("amp;"))
+                        name = name.substring("amp;".length());
 
                     StringConversions.addValueToStringArrayMap(result, name, value);
                 } catch (UnsupportedEncodingException e) {
@@ -179,6 +181,17 @@ public class WSRP2Utils {
             }
 
             if (urlTypeValue.equals(WSRPURLRewriter.URL_TYPE_RESOURCE_STRING)) {// NOTE: With Liferay, baseURL instanceof ResourceURL is always true!
+                final String resourcePath = navigationParameters.get(OrbeonPortletXFormsFilter.PATH_PARAMETER_NAME)[0];
+
+                // Encode the other parameters directly into the resource id, as they are really part of the identity
+                // of the resource and have nothing to do with the current render parameters.
+                navigationParameters.remove(OrbeonPortletXFormsFilter.PATH_PARAMETER_NAME); // WARNING: mutate navigationParameters
+                final String resourceQuery = NetUtils.encodeQueryString2(navigationParameters);
+                final String resourceId = NetUtils.appendQueryString(resourcePath, resourceQuery);
+
+                // Serve resources via the portlet
+                // NOTE: If encoding resource URLs is disabled, we won't even reach this point as a plain URL/path is
+                // generated. See WSRPURLRewriter.rewriteResourceURL().
                 final ResourceURL resourceURL = (ResourceURL) baseURL;
 
                 // With resource URLs, mode and state can't be changed
@@ -187,17 +200,12 @@ public class WSRP2Utils {
                 // The portal actually automatically adds existing parameters, including orbeon.path, in the resource URL.
                 // If we set orbeon.path again to store the resource URL, the resulting URL ends up having two orbeon.path.
                 // So instead we use the resource id, which seems to be designed for this anyway.
-                final String resourcePath = navigationParameters.get(OrbeonPortletXFormsFilter.PATH_PARAMETER_NAME)[0];
 
-                // Encode the other parameters directly into the resource id, as they are really part of the identity
-                // of the resource and have nothing to do with the current render parameters.
-                navigationParameters.remove(OrbeonPortletXFormsFilter.PATH_PARAMETER_NAME); // WARNING: mutate navigationParameters
-                final String resourceQuery = NetUtils.encodeQueryString2(navigationParameters);
-
-                resourceURL.setResourceID(NetUtils.appendQueryString(resourcePath, resourceQuery));
+                resourceURL.setResourceID(resourceId);
 
                 // PAGE is the default
                 // Could set it to FULL or PORTLET for resources such as images, JavaScript, etc., but NOT for e.g. /xforms-server
+                // Note that Liferay doesn't seem to do much with ResourceURL.FULL.
                 resourceURL.setCacheability(ResourceURL.PAGE);
             } else if (baseURL instanceof PortletURL) {
 
@@ -218,7 +226,8 @@ public class WSRP2Utils {
                 }
 
                 // Simply set all navigation parameters, including orbeon.path
-                portletURL.setParameters(navigationParameters);
+                if (navigationParameters != null)
+                    portletURL.setParameters(navigationParameters);
             }
 
             // TODO: wsrp-fragmentID

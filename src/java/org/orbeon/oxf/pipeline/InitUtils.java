@@ -28,6 +28,7 @@ import org.orbeon.oxf.pipeline.api.ProcessorDefinition;
 import org.orbeon.oxf.processor.*;
 import org.orbeon.oxf.processor.generator.DOMGenerator;
 import org.orbeon.oxf.properties.Properties;
+import org.orbeon.oxf.resources.ResourceNotFoundException;
 import org.orbeon.oxf.util.AttributesToMap;
 import org.orbeon.oxf.util.PipelineUtils;
 import org.orbeon.oxf.webapp.ServletContextExternalContext;
@@ -89,14 +90,34 @@ public class InitUtils {
             processor.start(pipelineContext);
             success = true;
         } catch (Throwable e) {
-            final LocationData locationData = ValidationException.getRootLocationData(e);
             final Throwable throwable = OXFException.getRootThrowable(e);
-            final String message = locationData == null
-                    ? "Exception with no location data"
-                    : "Exception at " + locationData.toString();
-            logger.error(message, throwable);
-            // Make sure the caller can do something about it, like trying to run an error page
-            throw new OXFException(e);
+            final LocationData locationData = ValidationException.getRootLocationData(e);
+            if (throwable instanceof HttpStatusCodeException) {
+                // Special exception used to set an error status code
+                // TODO: HttpStatusCodeException should support an optional message
+                externalContext.getResponse().sendError(((HttpStatusCodeException) throwable).code);
+                final String message = locationData == null
+                        ? "HttpStatusCodeException with no location data"
+                        : "HttpStatusCodeException at " + locationData.toString();
+                logger.info(message);
+            } else if (throwable instanceof ResourceNotFoundException) {
+                // Special exception used when a resource is not found
+                // NOTE: This could be handled as an internal server error vs. a not found error. It's a choice to say
+                // that ResourceNotFoundException shows as a 404 to the outside world.
+                final String resource = ((ResourceNotFoundException) throwable).resource;
+                externalContext.getResponse().sendError(404);
+                final String message = locationData == null
+                        ? " with no location data"
+                        : " at " + locationData.toString();
+                logger.info("Resource not found" + ((resource != null) ? ": " + resource : "") + message);
+            } else {
+                final String message = locationData == null
+                        ? "Exception with no location data"
+                        : "Exception at " + locationData.toString();
+                logger.error(message, throwable);
+                // Make sure the caller can do something about it, like trying to run an error page
+                throw new OXFException(e);
+            }
         } finally {
             // Free context
             StaticExternalContext.removeStaticContext();
@@ -470,5 +491,22 @@ public class InitUtils {
                 }
             });
         }
+    }
+
+    private static class HttpStatusCodeException extends RuntimeException {
+        public final int code;
+
+        public HttpStatusCodeException(int code) {
+            this.code = code;
+        }
+    }
+
+    /**
+     * Interrupt current processing and send an error code to the client.
+     *
+     * This assumes that the response has not yet been committed.
+     */
+    public static void sendError(int code) {
+        throw new HttpStatusCodeException(code);
     }
 }

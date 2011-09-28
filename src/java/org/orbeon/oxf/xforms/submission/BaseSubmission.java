@@ -24,7 +24,7 @@ import org.orbeon.oxf.xforms.XFormsContainingDocument;
 import org.orbeon.oxf.xforms.XFormsContextStack;
 import org.orbeon.oxf.xforms.XFormsProperties;
 import org.orbeon.oxf.xforms.XFormsUtils;
-import org.orbeon.oxf.xforms.event.events.XFormsSubmitDoneEvent;
+import org.orbeon.oxf.xforms.event.events.XFormsSubmitErrorEvent;
 import org.orbeon.oxf.xml.XMLUtils;
 
 import java.io.IOException;
@@ -130,7 +130,7 @@ public abstract class BaseSubmission implements Submission {
     /**
      * Perform a local local submission.
      */
-    protected ConnectionResult openLocalConnection(ExternalContext.Request request,
+    protected ConnectionResult openLocalConnection(ExternalContext externalContext,
                                                    ExternalContext.Response response,
                                                    final IndentedLogger indentedLogger,
                                                    XFormsModelSubmission xformsModelSubmission,
@@ -153,7 +153,7 @@ public abstract class BaseSubmission implements Submission {
                 messageBody = new byte[0];
 
             // Destination context path is the context path of the current request, or the context path implied by the new URI
-            final String destinationContextPath = isDefaultContext ? "" : isContextRelative ? request.getContextPath() : NetUtils.getFirstPathElement(resource);
+            final String destinationContextPath = isDefaultContext ? "" : isContextRelative ? externalContext.getRequest().getContextPath() : NetUtils.getFirstPathElement(resource);
 
             // Create requestAdapter depending on method
             final ForwardExternalContextRequestWrapper requestAdapter;
@@ -172,7 +172,7 @@ public abstract class BaseSubmission implements Submission {
                     if (rootAdjustedResourceURI == null)
                         throw new OXFException("Action must start with a servlet context path: " + resource);
 
-                    requestAdapter = new ForwardExternalContextRequestWrapper(request, destinationContextPath,
+                    requestAdapter = new ForwardExternalContextRequestWrapper(externalContext, indentedLogger, destinationContextPath,
                             rootAdjustedResourceURI, httpMethod, (mediatype != null) ? mediatype : XMLUtils.XML_CONTENT_TYPE, messageBody, headerNames, customHeaderNameValues);
                 } else {
                     // Simulate a GET or DELETE
@@ -192,7 +192,7 @@ public abstract class BaseSubmission implements Submission {
                     if (rootAdjustedResourceURI == null)
                         throw new OXFException("Action must start with a servlet context path: " + resource);
 
-                    requestAdapter = new ForwardExternalContextRequestWrapper(request, destinationContextPath,
+                    requestAdapter = new ForwardExternalContextRequestWrapper(externalContext, indentedLogger, destinationContextPath,
                             rootAdjustedResourceURI, httpMethod, headerNames, customHeaderNameValues);
                 }
             }
@@ -248,13 +248,19 @@ public abstract class BaseSubmission implements Submission {
                 }
             };
             if (isReplaceAll) {
-                // "the event xforms-submit-done is dispatched"
-                if (xformsModelSubmission != null)
-                    xformsModelSubmission.getXBLContainer(containingDocument).dispatchEvent(
-                            new XFormsSubmitDoneEvent(containingDocument, xformsModelSubmission, connectionResult.resourceURI, connectionResult.statusCode));
-
-                submissionProcess.process(requestAdapter, effectiveResponse);
+                final AllReplacer.ReplaceAllResponse replaceAllResponse = new AllReplacer.ReplaceAllResponse(effectiveResponse);
+                submissionProcess.process(requestAdapter, replaceAllResponse);
+                if (replaceAllResponse.getStatus() > 0)
+                    connectionResult.statusCode = replaceAllResponse.getStatus();
                 connectionResult.dontHandleResponse = true;
+
+                // Here we cause dispatch xforms-submit-error upon getting a non-success error code, even though the
+                // response has already been written out. This gives the form author a chance to do something in cases
+                // the response is buffered, for example do a sendError().
+                if (! XFormsSubmissionUtils.isSuccessCode(connectionResult.statusCode))
+                    throw new XFormsSubmissionException(submission, "xforms:submission for submission id: " + submission.getId() + ", error code received when submitting instance: " + connectionResult.statusCode, "processing submission response",
+                            new XFormsSubmitErrorEvent(containingDocument, submission, XFormsSubmitErrorEvent.ErrorType.RESOURCE_ERROR, connectionResult));
+
             } else {
                 // We must intercept the reply
                 final ResponseAdapter responseAdapter = new ResponseAdapter(response.getNativeResponse(), response);
@@ -277,16 +283,5 @@ public abstract class BaseSubmission implements Submission {
         } catch (IOException e) {
             throw new OXFException(e);
         }
-    }
-
-    public String getHeadersToForward(XFormsContainingDocument containingDocument, boolean isReplaceAll) {
-        // NOTE about headers forwarding: forward user-agent header for replace="all", since that *usually*
-        // simulates a request from the browser! Useful in particular when the target URL renders XForms
-        // in noscript mode, where some browser sniffing takes place for handling the <button> vs. <submit>
-        // element.
-        final String forwardSubmissionHeaders = XFormsProperties.getForwardSubmissionHeaders(containingDocument).trim().toLowerCase();
-        return isReplaceAll
-                ? (forwardSubmissionHeaders.length() == 0 ? "" : forwardSubmissionHeaders + " ") + "user-agent"
-                : forwardSubmissionHeaders;
     }
 }

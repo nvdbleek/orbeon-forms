@@ -19,12 +19,8 @@ import org.orbeon.oxf.pipeline.api.XMLReceiver;
 import org.orbeon.oxf.xforms.*;
 import org.orbeon.oxf.xml.*;
 import org.orbeon.oxf.xml.XMLUtils;
-import org.orbeon.oxf.xml.dom4j.Dom4jUtils;
-import org.orbeon.oxf.xml.dom4j.ExtendedLocationData;
-import org.orbeon.oxf.xml.dom4j.LocationData;
-import org.xml.sax.Attributes;
-import org.xml.sax.Locator;
-import org.xml.sax.SAXException;
+import org.orbeon.oxf.xml.dom4j.*;
+import org.xml.sax.*;
 import org.xml.sax.helpers.AttributesImpl;
 
 import java.util.*;
@@ -193,12 +189,13 @@ public class XFormsAnnotatorContentHandler extends XMLReceiverAdapter {
                 }
             }
 
+            // Rewrite elements / add appearances
             if (inTitle && "output".equals(localname)) {
                 // Special case of xforms:output within title, which produces an xxforms:text control
                 attributes = XMLUtils.addOrReplaceAttribute(attributes, "", "", "for", htmlTitleElementId);
                 startPrefixMapping(true, "xxforms", XFormsConstants.XXFORMS_NAMESPACE_URI);
                 startElement(true, XFormsConstants.XXFORMS_NAMESPACE_URI, "text", "xxforms:text", attributes);
-            } else if ("group".equals(localname) && isClosestXHTMLAncestorTableContainer()) {
+            } else if (("group".equals(localname) || "switch".equals(localname)) && isClosestXHTMLAncestorTableContainer()) {
                 // Closest xhtml:* ancestor is xhtml:table|xhtml:tbody|xhtml:thead|xhtml:tfoot|xhtml:tr
                 attributes = XMLUtils.addOrReplaceAttribute(attributes, "", "", XFormsConstants.APPEARANCE_QNAME.getName(), XFormsConstants.XXFORMS_SEPARATOR_APPEARANCE_QNAME.getQualifiedName());
                 startElement(true, uri, localname, qName, attributes);
@@ -248,9 +245,17 @@ public class XFormsAnnotatorContentHandler extends XMLReceiverAdapter {
 
             // NOTE: @id attributes on XHTML elements are rewritten with their effective id during XHTML output by
             // XHTMLElementHandler.
+            if ("true".equals(attributes.getValue(XFormsConstants.XXFORMS_NAMESPACE_URI, "control"))) {
+                // Non-XForms element which we want to turn into a control (specifically, into a group)
 
-            // Process AVTs if required
-            if (hostLanguageAVTs) {
+                // Create a new xforms:group control which specifies the element name to use. Namespace mappings for the
+                // given QName must be in scope as that QName is the original element name.
+                final AttributesImpl newAttributes = new AttributesImpl(getAttributesGatherNamespaces(qName, attributes, reusableStringArray, idIndex));
+                newAttributes.addAttribute(XFormsConstants.XXFORMS_NAMESPACE_URI, "element", "xxforms:element", ContentHandlerHelper.CDATA, qName);
+
+                startPrefixMapping(true, "xxforms", XFormsConstants.XXFORMS_NAMESPACE_URI);
+                startElement(true, XFormsConstants.XFORMS_NAMESPACE_URI, "group", "xforms:group", newAttributes);
+            } else if (hostLanguageAVTs) {
                 // This is a non-XForms element and we allow AVTs
                 final int attributesCount = attributes.getLength();
                 if (attributesCount > 0) {
@@ -393,6 +398,7 @@ public class XFormsAnnotatorContentHandler extends XMLReceiverAdapter {
             endPrefixMapping(true, "xxforms");// for resolving appearance
         } else {
             // Leave element untouched
+            // TODO: this might send the wrong element name, as some elements are rewritten in startElement() above!
             endElement(true, uri, localname, qName);
         }
 

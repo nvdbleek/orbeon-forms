@@ -21,7 +21,8 @@
         xmlns:oxf="http://www.orbeon.com/oxf/processors"
         xmlns:xi="http://www.w3.org/2001/XInclude"
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xmlns:pipeline="java:org.orbeon.oxf.processor.pipeline.PipelineFunctionLibrary">
+        xmlns:pipeline="java:org.orbeon.oxf.processor.pipeline.PipelineFunctionLibrary"
+        xmlns:form-runner="java:org.orbeon.oxf.fr.FormRunner">
 
     <!-- Parameters (app, form, document, and mode) -->
     <p:param type="input" name="instance"/>
@@ -42,6 +43,12 @@
                                 resource="/fr/service/persistence/crud/{$app}/{$form}/form/form.xhtml{
                                     if (instance('fr-parameters-instance')/document != '') then concat('?document=', instance('fr-parameters-instance')/document) else ''}"
                                 replace="all" xxforms:xinclude="true">
+                            <!-- HACK: we test on the request path to make this work for the toolbox, but really we should handle this in a different way -->
+                            <xforms:action ev:event="xforms-submit-error" type="xpath">
+                                if (not(matches(xxforms:get-request-path(), '/fr/service/custom/orbeon/(new)?builder/toolbox')))
+                                then form-runner:sendError((event('response-status-code'), 500)[1])
+                                else ()
+                            </xforms:action>
                         </xforms:submission>
                         <xforms:send ev:event="xforms-model-construct-done" submission="get-source-form-submission"/>
                     </xforms:model>

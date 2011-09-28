@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
 <!--
   Copyright (C) 2011 Orbeon, Inc.
 
@@ -31,10 +30,9 @@
     <!-- Import components -->
     <xsl:import href="view.xsl"/>
     <xsl:import href="buttons.xsl"/>
-    <xsl:import href="grid.xsl"/>
-    <xsl:import href="repeat.xsl"/>
-    <xsl:import href="inplace.xsl"/>
-    <xsl:import href="section.xsl"/>
+    <xsl:import href="inplace.xsl"/><!-- just for inplace textarea for now -->
+    <xsl:import href="section.xsl"/><!-- pass global section properties to fr:section -->
+    <xsl:import href="repeat.xsl"/> <!-- convert legacy fr:repeat to fr:grid -->
 
     <!-- Global variables -->
     <xsl:variable name="app" select="doc('input:instance')/*/app" as="xs:string"/>
@@ -42,11 +40,12 @@
     <xsl:variable name="mode" select="doc('input:instance')/*/mode" as="xs:string?"/>
 
     <xsl:variable name="is-detail" select="$mode != 'summary'" as="xs:boolean"/>
-    <xsl:variable name="is-form-builder" select="$app = 'orbeon' and $form = 'builder'" as="xs:boolean"/>
+    <xsl:variable name="is-form-builder" select="$app = 'orbeon' and $form = ('builder', 'newbuilder')" as="xs:boolean"/>
     <xsl:variable name="is-noscript-support" select="not(/xhtml:html/xhtml:head/xforms:model[1]/@xxforms:noscript-support = 'false')" as="xs:boolean"/>
     <xsl:variable name="is-noscript" select="doc('input:request')/request/parameters/parameter[name = 'fr-noscript']/value = 'true'
                                                 and $is-noscript-support" as="xs:boolean"/>
     <xsl:variable name="input-data" select="/*" as="element(xhtml:html)"/>
+    <xsl:variable name="has-pdf-template" select="normalize-space(/xhtml:html/xhtml:head//xforms:instance[@id = 'fr-form-attachments']/*/pdf) != ''"/>
 
     <!-- Properties -->
     <xsl:variable name="has-version" select="pipeline:property(string-join(('oxf.fr.version', $app, $form), '.'))" as="xs:boolean?"/>
@@ -69,6 +68,7 @@
     <xsl:variable name="is-show-explanation" select="pipeline:property(string-join(('oxf.fr.detail.view.show-explanation', $app, $form), '.')) = true()" as="xs:boolean"/>
     <xsl:variable name="is-inline-hints" select="not(pipeline:property(string-join(('oxf.fr.detail.hints.inline', $app, $form), '.')) = false())" as="xs:boolean"/>
     <xsl:variable name="is-animate-sections" select="not($is-noscript) and not(pipeline:property(string-join(('oxf.fr.detail.ajax.section.animate', $app, $form), '.')) = false())" as="xs:boolean"/>
+    <xsl:variable name="has-captcha" as="xs:boolean" select="pipeline:property(string-join(('oxf.fr.detail.captcha', $app, $form), '.'))"/>
 
     <xsl:variable name="is-section-collapse" select="(not($is-noscript) and $is-ajax-section-collapse) or $is-noscript-section-collapse" as="xs:boolean"/>
 
@@ -177,14 +177,15 @@
         <!-- Model receiving input parameters -->
         <xforms:model id="fr-parameters-model"
                       xxforms:external-events="{@xxforms:external-events}{if ($mode = ('new', 'view', 'edit')) then ' fr-open-pdf' else ''}"
-                      xxforms:readonly-appearance="{if ($mode = ('view', 'pdf', 'email')) then 'static' else 'dynamic'}"
+                      xxforms:readonly-appearance="{if ($mode = ('view', 'email') or ($mode = 'pdf' and not($has-pdf-template))) then 'static' else 'dynamic'}"
+                      xxforms:encrypt-item-values="{not($mode = 'pdf' and $has-pdf-template)}"
                       xxforms:order="{if ($is-noscript) then 'label control alert hint help' else 'help label control alert hint'}"
                       xxforms:offline="false"
                       xxforms:noscript="{$is-noscript}"
                       xxforms:noscript-support="{$is-noscript-support}"
                       xxforms:xforms11-switch="false"
                       xxforms:xpath-analysis="false"
-                      xxforms:xhtml-layout="nospan">
+                      xxforms:xhtml-layout="span">
 
             <!-- Don't enable client events filtering for FB -->
             <xsl:if test="$is-form-builder">
@@ -218,7 +219,8 @@
 
         <xxforms:variable name="url-base-for-requests" select="'{$url-base-for-requests}'"/>
 
-        <!-- This model handles roles and permissions -->
+        <!-- This model handles Form Builder roles and permissions -->
+        <!-- NOTE: We could remove this if not($is-form-builder), except for the use of the $fr-roles variable -->
         <xi:include href="oxf:/apps/fr/includes/roles-model.xml" xxi:omit-xml-base="true"/>
         <!-- This model handles i18n resources -->
         <xi:include href="oxf:/apps/fr/i18n/resources-model.xml" xxi:omit-xml-base="true"/>
@@ -228,17 +230,9 @@
             <xsl:variable name="section-ids" select="$input-data//fr:section/@id" as="xs:string*"/>
             <xsl:variable name="section-ids-sequence" select="concat('(', string-join(for $s in $section-ids return concat('''', $s, ''''), ','), ')')" as="xs:string*"/>
 
-            <!-- Collapse all sections -->
-            <xforms:action ev:event="fr-collapse-all" xxforms:iterate="{$section-ids-sequence}">
-                <xforms:toggle case="case-{{.}}-closed"/>
-                <xforms:toggle case="case-button-{{.}}-closed"/>
-            </xforms:action>
-
-            <!-- Expand all sections -->
-            <xforms:action ev:event="fr-expand-all" xxforms:iterate="{$section-ids-sequence}">
-                <xforms:toggle case="case-{{.}}-open"/>
-                <xforms:toggle case="case-button-{{.}}-open"/>
-            </xforms:action>
+            <!-- Collapse or expand all sections -->
+            <xforms:dispatch ev:event="fr-collapse-all" xxforms:iterate="{$section-ids-sequence}" name="fr-collapse" targetid="{{.}}"/>
+            <xforms:dispatch ev:event="fr-expand-all"   xxforms:iterate="{$section-ids-sequence}" name="fr-expand"   targetid="{{.}}"/>
         </xforms:model>
         <!-- This model handles global error summary information -->
         <xforms:model id="fr-error-summary-model">
@@ -260,10 +254,11 @@
                 <xxforms:variable name="parameters" value="xxforms:instance('fr-parameters-instance')" as="element()"/>
                 <xxforms:variable name="app" value="$parameters/app" as="xs:string"/>
                 <xxforms:variable name="form" value="$parameters/form" as="xs:string"/>
-                <xxforms:variable name="has-captcha" select="xxforms:property(string-join(('oxf.fr.detail.captcha', $app, $form), '.'))"/>
-                <xforms:action if="$has-captcha and xxforms:instance('fr-persistence-instance')/captcha = 'false'">
-                    <xforms:dispatch target="recaptcha" name="fr-verify"/>
-                </xforms:action>
+                <xsl:if test="$has-captcha">
+                    <xforms:action if="xxforms:instance('fr-persistence-instance')/captcha = 'false'">
+                        <xforms:dispatch target="recaptcha" name="fr-verify"/>
+                    </xforms:action>
+                </xsl:if>
 
                 <!-- Show all error in error summaries -->
                 <xsl:if test="$error-summary-top"><xforms:dispatch name="fr-visit-all" targetid="error-summary-control-top"/></xsl:if>
@@ -323,7 +318,7 @@
             <xforms:bind nodeset="instance('fr-form-instance')" readonly="xxforms:instance('fr-parameters-instance')/mode = ('view', 'pdf', 'email')"/>
 
             <!-- Variable exposing all the user roles -->
-            <xxforms:variable name="fr-roles" select="tokenize(xxforms:instance('fr-roles-instance')/all-roles, '\s+')" as="xs:string*"/>
+            <xxforms:variable name="fr-roles" select="tokenize(xxforms:instance('fr-permissions')/@all-roles, '\s+')" as="xs:string*"/>
 
         </xsl:copy>
 

@@ -45,17 +45,6 @@
 #fr-view .fr-hidden { display: none }
 .fr-grid .fr-grid-td .fr-grid-content .fr-hidden { display: none } /* for users of .fr-hidden without #fr-view */
 
-/* Nicely position the help image */
-.xforms-help-image {
-    vertical-align: middle;
-    display: inline;
-    margin: 0 .5em 0 -1px;/* move icon to the left a bit to align it better */
-    *margin-top: .25em;   /* help IE 6 position icon relatively to the label */
-    padding: 0;
-    float: left; /* HACK: Without the "float: left" on FF2/3 the mouseover event arrive on the label, not the help
-                    image at the left of the label. */
-}
-
 .xforms-noscript .xforms-help-image {
     /* NOTE: In noscript mode, help appears last in a control for accessibility reasons */
     display: block;
@@ -235,15 +224,15 @@ button.xforms-trigger img, .xforms-trigger button img { margin-right: 10px }
 }
 
 /* Special sizing for expand/collapse buttons */
-.fr-buttons #fr-collapse-all-button .xforms-trigger, .fr-buttons #fr-expand-all-button .xforms-trigger,
-    .fr-buttons #fr-collapse-all-button .xforms-trigger button, .fr-buttons #fr-expand-all-button .xforms-trigger button {
+.fr-buttons #fr-collapse-all-button .xforms-trigger, .fr-buttons #fr-expand-all-button .xforms-trigger, .fr-buttons #fr-refresh-button .xforms-trigger,
+    .fr-buttons #fr-collapse-all-button .xforms-trigger button, .fr-buttons #fr-expand-all-button .xforms-trigger button, .fr-buttons #fr-refresh-button .xforms-trigger button {
 
     min-width: 2em;
     width: 2em;
     padding: 0;
 }
 
-.fr-buttons #fr-collapse-all-button img, .fr-buttons #fr-expand-all-button img {
+.fr-buttons #fr-collapse-all-button img, .fr-buttons #fr-expand-all-button img, .fr-buttons #fr-refresh-button img {
     margin-right: 0
 }
 
@@ -281,6 +270,7 @@ button.xforms-trigger img, .xforms-trigger button img { margin-right: 10px }
 .fr-repeat-table tr th .xforms-help-image { margin-top: 0 }
 
 .yui-skin-sam .fr-repeat-column-trigger .yui-dt-liner { padding: 4px } /* override YUI */
+.yui-skin-sam .yui-dt .fr-repeat-table th .yui-dt-liner { white-space: normal } /* override YUI as this is not a datatable, so allow repeat th text to wrap */
 .fr-repeat-table .fr-repeat-column-trigger { width: 24px; text-align: center }
 .yui-skin-sam .fr-repeat-table .fr-repeat-column-trigger { vertical-align: middle } /* override YUI */
 .fr-repeat-table .fr-repeat-column-trigger img { margin: 0; display: block }
@@ -318,6 +308,7 @@ button.xforms-trigger img, .xforms-trigger button img { margin-right: 10px }
 }
 /*.fr-section-container .fr-section-open-close:hover { background-color: #FFFFDD; border: 1px solid #FFFF88 }*/
 .fr-section-container .fr-section-content {
+    display: block;
     margin-left: 22px;
     margin-bottom: .25em;
 }
@@ -335,26 +326,32 @@ button.xforms-trigger img, .xforms-trigger button img { margin-right: 10px }
 
 /* ***** Grids ****************************************************************************************************** */
 
-.fr-grid {
+.xbl-fr-grid table.fr-grid {
     width: 100%;
     border-collapse: separate;
     clear: both;
-    margin: 0; /* We used to add space before grid, so grid is not right below title or previous grid, but it's better like this now right? */
+    margin: 0 0 .5em;
 }
 .fr-grid tr th { text-align: left }
-.fr-grid .fr-layout-table tr td { width: auto }
 
 /* Cell content */
 .fr-grid-content {
-    margin: 0 0.5em 0.5em;      /* Add some space around control */
+    margin: 0.5em;              /* Add some space around control */
     *padding-right: 6px;        /* To help IE move back controls within .fr-grid-content */
 }
 
+.fr-grid-content .xforms-help-image {
+    margin: 0 0 0 -1px; /* move icon to the left a bit to align it better */
+    padding: 0 .5em 0 0;
+    float: left;
+}
+
 .fr-grid-content .xforms-label {
-    margin-top: .25em;      /* Space between control and the one on top of this one */
-    margin-bottom: 0.3em;   /* Insert some space between the label / help and the control (we add spacing below the label rather
-                               than above the control to make the CSS more generally applicable to XBL components) */
-    display: block;         /* So the margin has an effect */
+    margin-bottom: .5em;        /* Insert some space between the label / help and the control (we add spacing below the label rather
+                                   than above the control to make the CSS more generally applicable to XBL components) */
+    display: block;             /* Content after the label to show on a "new line" */
+    overflow: hidden;           /* So the block area doesn't extend below the floated help, when there is one. Also see http://bit.ly/ruAKSU */
+    zoom: 1;                    /* For the overflow: hidden to have an effect on IE6 */
 }
 
 /* Style controls or component groups */
@@ -526,7 +523,7 @@ pre.xforms-textarea, span.xforms-textarea pre { white-space: -moz-pre-wrap; whit
     .fr-status-icons { display: none }
     .fr-footer { display: none }
     .fr-section-container .fr-section-open-close { display: none }
-    .xforms-loading-loading { display: none }
+    .xforms-form .xforms-loading-loading { display: none }
     /* Upload remove button */
     .xforms-upload-remove { display: none }
     /* Remove background attachment image */

@@ -26,9 +26,7 @@ import org.orbeon.oxf.webapp.ProcessorService;
 
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
+import javax.servlet.http.*;
 import java.io.*;
 import java.security.Principal;
 import java.util.*;
@@ -91,18 +89,7 @@ public class ServletExternalContext extends ServletWebAppExternalContext impleme
         }
 
         public String getContainerNamespace() {
-            if (namespace == null) {
-                final String namespaceAttribute = (String) nativeRequest.getAttribute(OrbeonPortletXFormsFilter.PORTLET_NAMESPACE_TEMPLATE_ATTRIBUTE);
-                if (namespaceAttribute != null) {
-                    // Namespace is provided with request so we use that
-                    // This is useful e.g. when a portlet delegates rendering to a servlet
-                    namespace = namespaceAttribute;
-                } else {
-                    namespace = "";
-                }
-            }
-
-            return namespace;
+            return getResponse().getNamespacePrefix();
         }
 
         public String getContextPath() {
@@ -526,7 +513,7 @@ public class ServletExternalContext extends ServletWebAppExternalContext impleme
                 expires = now + (now - lastModified) / 10;
             }
 
-            // Set last-modified
+            // Set caching headers
             nativeResponse.setDateHeader("Last-Modified", lastModified);
             nativeResponse.setDateHeader("Expires", expires);
 
@@ -555,7 +542,7 @@ public class ServletExternalContext extends ServletWebAppExternalContext impleme
         }
 
         public String getNamespacePrefix() {
-            return "";
+            return urlRewriter.getNamespacePrefix();
         }
 
         public void setTitle(String title) {
@@ -772,8 +759,8 @@ public class ServletExternalContext extends ServletWebAppExternalContext impleme
                 response.setURLRewriter(new TemplateURLRewriter(request));
             } else if ("portlet2".equals(URLRewriterUtils.getRewritingStrategy("servlet", REWRITING_STRATEGY_DEFAULT)) ||
                         "wsrp".equals(URLRewriterUtils.getRewritingStrategy("servlet", REWRITING_STRATEGY_DEFAULT))) {
-                // Configuration asks to use portlet2
-                response.setURLRewriter(new WSRPURLRewriter(pipelineContext, getRequest()));
+                // Configuration asks to use portlet2/wsrp
+                response.setURLRewriter(new WSRPURLRewriter(pipelineContext, getRequest(), URLRewriterUtils.isWSRPEncodeResources()));
             } else {
                 // Default
                 response.setURLRewriter(new ServletURLRewriter(getRequest()));

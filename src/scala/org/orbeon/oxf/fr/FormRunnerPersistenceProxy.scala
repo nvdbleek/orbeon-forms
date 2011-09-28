@@ -24,10 +24,10 @@ import org.orbeon.oxf.resources.handler.HTTPURLConnection
 import org.orbeon.oxf.processor.generator.RequestGenerator
 import org.orbeon.oxf.properties.Properties
 import org.orbeon.oxf.xml.TransformerUtils
-import org.orbeon.oxf.util.{XPathCache, NetUtils}
 import org.orbeon.scaxon.XML._
 import javax.xml.transform.stream.StreamResult
 import org.orbeon.oxf.xforms.action.XFormsAPI
+import org.orbeon.oxf.util.{XPathCache, NetUtils}
 
 /**
  * The persistence proxy processor:
@@ -62,14 +62,14 @@ class FormRunnerPersistenceProxy extends ProcessorImpl {
         }
     }
 
-    private def proxyHeaders(headers: => Traversable[(String, Seq[String])], set: (String, String) => Unit, out: Boolean): Unit =
+    private def proxyHeaders(headers: => Traversable[(String, Seq[String])], setHeader: (String, String) => Unit, out: Boolean): Unit =
         for {
             (name, values) <- headers
             if !Set("transfer-encoding", "connection", "host")(name.toLowerCase)
             if !out || name.toLowerCase != "content-length"
             if values != null && values.nonEmpty
         } yield
-            set(capitalizeHeader(name), values mkString ",")
+            setHeader(capitalizeHeader(name), values mkString ",")
 
     // Proxy the request depending on app/form name and whether we are accessing form or data
     private def proxyRequest(request: Request, response: Response, app: String, form: String, formOrData: String, path: String) {
@@ -77,6 +77,8 @@ class FormRunnerPersistenceProxy extends ProcessorImpl {
         // Get persistence implementation target URL and configuration headers
         val (persistenceBaseURL, headers) = FormRunner.getPersistenceURLHeaders(app, form, formOrData)
         val connection = proxyEstablishConnection(request, dropTrailingSlash(persistenceBaseURL) + path, headers)
+        // Proxy status code
+        response.setStatus(connection.getResponseCode)
         // Proxy incoming headers
         proxyHeaders(connection.getHeaderFields map {case (name, values) => (name, values.toSeq)}, response.setHeader _, out = false)
         copyStream(connection.getInputStream, response.getOutputStream)
@@ -145,6 +147,7 @@ class FormRunnerPersistenceProxy extends ProcessorImpl {
             // Read all the forms for the current service
             val serviceURI = baseURI + "/form"
             val inputStream = proxyEstablishConnection(request, serviceURI, headers) getInputStream
+            // TODO: handle connection.getResponseCode
             val forms = TransformerUtils.readTinyTree(XPathCache.getGlobalConfiguration, inputStream, serviceURI, false, false)
             forms \\ "forms" \\ "form"
         }

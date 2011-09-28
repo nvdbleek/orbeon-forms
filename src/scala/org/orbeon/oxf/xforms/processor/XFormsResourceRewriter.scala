@@ -45,10 +45,8 @@ object XFormsResourceRewriter {
     }
 
     private def generateCSS(logger: IndentedLogger, resources: JList[XFormsFeatures.ResourceConfig], propertyContext: PropertyContext, os: OutputStream, isMinimal: Boolean): Unit = {
-        val externalContext = NetUtils.getExternalContext
-        val response = externalContext.getResponse
-        val containerNamespace = externalContext.getRequest.getContainerNamespace
 
+        val response = NetUtils.getExternalContext.getResponse
         val outputWriter = new OutputStreamWriter(os, "utf-8")
 
         // Create matcher that matches all paths in case resources are versioned
@@ -72,12 +70,14 @@ object XFormsResourceRewriter {
             }
 
             // Rewrite it all
-            outputWriter write rewriteCSS(originalCSS, containerNamespace, resourcePath, response, logger)
+            outputWriter write rewriteCSS(originalCSS, resourcePath, response, logger)
         }
         outputWriter.flush()
     }
 
-    def rewriteCSS(css: String, namespace: String, resourcePath: String, response: ExternalContext.Response, logger: IndentedLogger) = {
+    def rewriteCSS(css: String, resourcePath: String, response: ExternalContext.Response, logger: IndentedLogger) = {
+
+        val namespace = response.getNamespacePrefix
 
         // Match and rewrite an id within a selector
         val matchId = """#([\w]+)""".r
@@ -94,32 +94,28 @@ object XFormsResourceRewriter {
                 val rewrittenURI = response.rewriteResourceURL(resolvedURI, false)
                 "url(" + rewrittenURI + ")"
             } catch {
-                case e: Exception => {
+                case _ =>
                     logger.logWarning("resources", "found invalid URI in CSS file", "uri", url)
                     "url(" + url + ")"
-                }
             }
 
         // Find approximately pairs of selectors/blocks and rewrite each part
         // Ids are rewritten only if the namespace is not empty
         val r = """([^\{]*\s*)(\{[^\}]*\})""".r
-        r.replaceAllIn(css, e => (if (namespace isEmpty) e.group(1) else rewriteSelector(e.group(1))) + rewriteBlock(e.group(2)))
+        r.replaceAllIn(css, e => (if (namespace.size == 0) e.group(1) else rewriteSelector(e.group(1))) + rewriteBlock(e.group(2)))
     }
 
-    private def generateJS(indentedLogger: IndentedLogger, resources: JList[XFormsFeatures.ResourceConfig], propertyContext: PropertyContext, os: OutputStream, isMinimal: Boolean): Unit = {
+    private def generateJS(logger: IndentedLogger, resources: JList[XFormsFeatures.ResourceConfig], propertyContext: PropertyContext, os: OutputStream, isMinimal: Boolean): Unit = {
         // Output Orbeon Forms version
         val outputWriter = new OutputStreamWriter(os, "utf-8")
         outputWriter.write("// This file was produced by " + Version.getVersionString + "\n")
         outputWriter.flush()
 
-        var first = true
         for (resourceConfig <- resources) {
-            if (!first)
-                os.write('\n')
             ScalaUtils.useAndClose(ResourceManagerWrapper.instance.getContentAsStream(resourceConfig.getResourcePath(isMinimal))) { is =>
                 NetUtils.copyStream(is, os)
             }
-            first = false
+            os.write('\n')
         }
     }
 }

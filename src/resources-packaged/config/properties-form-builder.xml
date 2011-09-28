@@ -44,13 +44,17 @@
     <property as="xs:boolean" name="oxf.fb.menu.edit-source"                         value="true"/>
     <property as="xs:boolean" name="oxf.fb.menu.view-source"                         value="false"/>
     <property as="xs:boolean" name="oxf.fb.menu.css"                                 value="false"/>
+    <property as="xs:boolean" name="oxf.fb.menu.custom-xml"                          value="true"/>
+    <property as="xs:boolean" name="oxf.fb.menu.permissions"                         value="true"/>
     <property as="xs:boolean" name="oxf.fb.metadata.logo"                            value="true"/>
     <property as="xs:integer" name="oxf.fb.grid.max-columns"                         value="4"/>
 
     <!-- Don't animate section collapse -->
-    <property as="xs:boolean" name="oxf.fr.detail.ajax.section.animate.orbeon.builder"  value="false"/>
+    <property as="xs:boolean" name="oxf.fr.detail.ajax.section.animate.orbeon.builder"    value="false"/>
+    <property as="xs:boolean" name="oxf.fr.detail.ajax.section.animate.orbeon.newbuilder" value="false"/>
 
     <!-- Form Builder summary page  -->
     <property as="xs:string"  name="oxf.fr.summary.buttons.orbeon.builder"           value="new edit delete"/>
+    <property as="xs:string"  name="oxf.fr.summary.buttons.orbeon.newbuilder"        value="new edit delete"/>
 
 </properties>

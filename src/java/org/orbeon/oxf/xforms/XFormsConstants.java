@@ -96,6 +96,7 @@ public class XFormsConstants {
     public static final QName MEDIATYPE_QNAME = new QName("mediatype");
     public static final QName SRC_QNAME = new QName("src");
 
+    public static final QName TARGETID_QNAME = new QName("targetid");
     public static final QName TARGET_QNAME = new QName("target");
     public static final QName SELECT_QNAME = new QName("select");
     public static final QName FOR_QNAME = new QName("for");
@@ -211,6 +212,7 @@ public class XFormsConstants {
     public static final QName XXFORMS_COLS_QNAME = new QName("cols", XXFORMS_NAMESPACE);
     public static final QName XXFORMS_ROWS_QNAME = new QName("rows", XXFORMS_NAMESPACE);
     public static final QName XXFORMS_GROUP_QNAME = new QName("group", XXFORMS_NAMESPACE);
+    public static final QName XXFORMS_ELEMENT_QNAME = new QName("element", XXFORMS_NAMESPACE);
 
     public static final String VALID_ATTRIBUTE_NAME = "valid";
     public static final String RELEVANT_ATTRIBUTE_NAME = "relevant";

@@ -324,6 +324,13 @@ public class XMLUtils {
             is.setSystemId(systemId);
             is.setPublicId(publicId);
             final URL url = URLFactory.createURL(systemId);
+
+            // Would be nice to support XML Catalogs or similar here. See:
+            // http://xerces.apache.org/xerces2-j/faq-xcatalogs.html
+            if (url.getProtocol().equals("http")) {
+                logger.warn("XML entity resolver for public id: " + publicId + " is accessing external entity via HTTP: " + url.toExternalForm());
+            }
+
             is.setByteStream(url.openConnection().getInputStream());
             return is;
         }
@@ -959,7 +966,7 @@ public class XMLUtils {
     public static void inputStreamToBase64Characters(InputStream is, ContentHandler contentHandler) {
 
         try {
-            final OutputStream os = new ContentHandlerOutputStream(contentHandler);
+            final OutputStream os = new ContentHandlerOutputStream(contentHandler, false);
             NetUtils.copyStream(new BufferedInputStream(is), os);
             os.close(); // necessary with ContentHandlerOutputStream to make sure all extra characters are written
         } catch (Exception e) {

@@ -145,7 +145,7 @@ public class RequestDispatcherSubmission extends BaseSubmission {
 
         // Headers
         final Map<String, String[]> customHeaderNameValues = evaluateHeaders(p.contextStack);
-        final String[] headersToForward = StringUtils.split(getHeadersToForward(containingDocument, p.isReplaceAll));
+        final String[] headersToForward = StringUtils.split(XFormsProperties.getForwardSubmissionHeaders(containingDocument, p.isReplaceAll));
 
         final String submissionEffectiveId = submission.getEffectiveId();
 
@@ -170,29 +170,17 @@ public class RequestDispatcherSubmission extends BaseSubmission {
                     // Update status
                     status[0] = true;
 
-                    if (connectionResult.dontHandleResponse) {
-                        // This means we got a submission with replace="all" and openRequestDispatcherConnection() already did all the work
-                        // TODO: Could this be done in a Replacer instead?
+                    // TODO: can we put this in the Replacer?
+                    if (connectionResult.dontHandleResponse)
                         containingDocument.setGotSubmissionReplaceAll();
 
-                        // Update status
-                        status[1] = true;
+                    // Obtain replacer, deserialize and update status
+                    final Replacer replacer = submission.getReplacer(connectionResult, p);
+                    replacer.deserialize(connectionResult, p, p2);
+                    status[1] = true;
 
-                        // Caller has nothing to do
-                        return null;
-                    } else {
-                        // Obtain replacer
-                        final Replacer replacer = submission.getReplacer(connectionResult, p);
-
-                        // Deserialize
-                        replacer.deserialize(connectionResult, p, p2);
-
-                        // Update status
-                        status[1] = true;
-
-                        // Return result
-                        return new SubmissionResult(submissionEffectiveId, replacer, connectionResult);
-                    }
+                    // Return result
+                    return new SubmissionResult(submissionEffectiveId, replacer, connectionResult);
                 } catch (Throwable throwable) {
                     // Exceptions are handled further down
                     return new SubmissionResult(submissionEffectiveId, throwable, connectionResult);
@@ -247,7 +235,7 @@ public class RequestDispatcherSubmission extends BaseSubmission {
         final boolean isDefaultContext = requestDispatcher.isDefaultContext();
 
         final ExternalContext.Response response = containingDocument.getResponse() != null ? containingDocument.getResponse() : externalContext.getResponse();
-        return openLocalConnection(externalContext.getRequest(), response,indentedLogger,
+        return openLocalConnection(externalContext, response, indentedLogger,
            xformsModelSubmission, httpMethod, effectiveResource, mediatype,
            messageBody, queryString, isReplaceAll, headerNames, customHeaderNameValues, new SubmissionProcess() {
                public void process(ExternalContext.Request request, ExternalContext.Response response) {

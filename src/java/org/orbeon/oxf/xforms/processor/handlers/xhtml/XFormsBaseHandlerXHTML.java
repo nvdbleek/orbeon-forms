@@ -24,7 +24,8 @@ import org.orbeon.oxf.xforms.control.XFormsControlFactory;
 import org.orbeon.oxf.xforms.control.XFormsSingleNodeControl;
 import org.orbeon.oxf.xforms.control.XFormsValueControl;
 import org.orbeon.oxf.xforms.processor.handlers.HandlerContext;
-import org.orbeon.oxf.xforms.processor.handlers.xhtml.XFormsBaseHandler.LHHAC; // Keep scala compiler happy
+import org.orbeon.oxf.xforms.processor.handlers.XFormsBaseHandler;
+import org.orbeon.oxf.xforms.processor.handlers.XFormsBaseHandler.LHHAC; // Keep scala compiler happy
 import org.orbeon.oxf.xml.ContentHandlerHelper;
 import org.orbeon.oxf.xml.ElementHandler;
 import org.orbeon.oxf.xml.XMLConstants;

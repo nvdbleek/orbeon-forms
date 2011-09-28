@@ -124,5 +124,5 @@
 	<classpathentry kind="lib" path="lib/saxon-9-1-0-8_orbeon_20110613.jar"/>
 	<classpathentry kind="lib" path="lib/scala-compiler-2.9.1.jar"/>
 	<classpathentry kind="lib" path="lib/scala-library-2.9.1.jar"/>
-	<classpathentry kind="output" path="bin"/>
+	<classpathentry kind="output" path="build/orbeon-war/WEB-INF/classes"/>
 </classpath>

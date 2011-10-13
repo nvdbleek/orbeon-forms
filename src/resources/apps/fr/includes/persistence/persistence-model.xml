@@ -258,9 +258,8 @@
                                                   (e.g. when doing an auto-save). -->
         <xxforms:variable name="check-data-valid" select="event('fr:check-data-valid')"/>
 
-        <!-- See if we need to verify the captcha -->
-        <xxforms:variable name="has-captcha" select="xxforms:property(string-join(('oxf.fr.detail.captcha', $app, $form), '.'))"/>
-        <xxforms:variable name="captcha-needs-verification" select="$has-captcha and not($captcha-checked) and instance('fr-persistence-instance')/captcha = 'false'"/>
+        <xforms:setvalue ref="instance('fr-persistence-instance')/save-attempted">true</xforms:setvalue>
+        <xforms:action if="$document != ''">
 
             <!-- Check validity of data before trying to save, because:
                  1) We don't want to save attachments if the form is invalid.
@@ -270,29 +269,16 @@
 
             <xxforms:variable name="validity-passed" select="not($check-data-valid) or (xxforms:instance('fr-error-summary-instance')/valid = 'true')" as="xs:boolean"/>
 
-        <!-- Otherwise proceed with save -->
-        <xforms:action if="not($captcha-needs-verification)">
-            <xforms:setvalue ref="instance('fr-persistence-instance')/save-attempted">true</xforms:setvalue>
-            <xforms:action if="$document != ''">
-
-                <!-- Check validity of data before trying to save, because:
-                     1) We don't want to save attachments if the form is invalid.
-                     2) Submission doesn't check validity anymore. -->
-                <!-- We use instance('fr-error-summary-instance')/valid and not xxforms:valid() because the instance
-                     validity may not be reflected with the use of XBL components. -->
-
-                <xxforms:variable name="validity-passed" select="not($check-data-valid) or (xxforms:instance('fr-error-summary-instance')/valid = 'true')" as="xs:boolean"/>
-
-                <xforms:action if="not($validity-passed)">
-                    <!-- Data not valid: display error -->
-                    <xforms:setvalue ref="xxforms:instance('fr-persistence-instance')/message"
-                                     model="fr-resources-model" value="$fr-fr-resources/detail/messages/form-validation-error"/>
-                    <xforms:toggle case="fr-message-validation-error"/>
-                    <!-- Mark all active alerts as visited -->
-                    <xforms:dispatch name="fr-visit-alerts" target="fr-persistence-model"/>
-                    <!-- Open all sections -->
-                    <xforms:dispatch name="fr-expand-all" target="fr-sections-model"/>
-                </xforms:action>
+            <xforms:action if="not($validity-passed)">
+                <!-- Data not valid: display error -->
+                <xforms:setvalue ref="xxforms:instance('fr-persistence-instance')/message"
+                                 model="fr-resources-model" value="$fr-fr-resources/detail/messages/form-validation-error"/>
+                <xforms:toggle case="fr-message-validation-error"/>
+                <!-- Mark all active alerts as visited -->
+                <xforms:dispatch name="fr-visit-alerts" target="fr-persistence-model"/>
+                <!-- Open all sections -->
+                <xforms:dispatch name="fr-expand-all" target="fr-sections-model"/>
+            </xforms:action>
 
             <!-- Display message if there is at least one upload in progress -->
             <xforms:message if="$validity-passed and xxforms:pending-uploads() > 0" model="fr-resources-model" value="$fr-fr-resources/detail/messages/upload-in-progress"/>

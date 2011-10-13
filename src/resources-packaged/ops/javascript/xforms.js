@@ -3577,13 +3577,23 @@ ORBEON.xforms.Events = {
      * Event listener on dialogs called by YUI when the dialog is shown.
      */
 	dialogShow: function(type, args, me) {
+        var dialogId = me;
+
 		if (ORBEON.xforms.Globals.isRenderingEngineTrident) {
             // On IE6, when the dialog is opened for the second time, part of the dialog are not visible.
             // Setting the class again on the dialog gives notch to IE and is hack to get around this issue.
-            var dialogId = me;
-			var dialog = ORBEON.util.Dom.get(dialogId);
-			dialog.className = dialog.className;
+            var dialogElement = ORBEON.util.Dom.get(dialogId);
+			dialogElement.className = dialogElement.className;
 		}
+
+        // Set a max-height on the dialog body, so the dialog doesn't get larger than the viewport
+        var yuiDialog = ORBEON.xforms.Globals.dialogs[dialogId];
+        var maxHeight =
+            YAHOO.util.Dom.getViewportHeight()
+            - (yuiDialog.element.clientHeight - yuiDialog.body.clientHeight)
+            - 40;
+
+        yuiDialog.body.style.maxHeight = maxHeight + "px";
     },
 
     /**
@@ -3737,8 +3747,8 @@ ORBEON.xforms.Events = {
      */
     dialogMinimalBodyClick: function(event, yuiDialog) {
         // If this dialog is visible
-        if (yuiDialog.element.style.display == "block") {
-            // Abord if one of the parents is drop-down dialog
+        if (yuiDialog.element.style.visibility != "hidden") {
+            // Abort if one of the parents is drop-down dialog
             var current = YAHOO.util.Event.getTarget(event);
             var foundDropDownParent = false;
             while (current != null && current != document) {
@@ -3975,11 +3985,11 @@ ORBEON.xforms.XBL = {
         };
     },
 
-    callValueChanged: function(prefix, component, property) {
+    callValueChanged: function(prefix, component, target, property) {
         var partial = YAHOO.xbl;                                    if (partial == null) return;
         partial = partial[prefix];                                  if (partial == null) return;
         partial = partial[component];                               if (partial == null) return;
-        partial = partial.instance(this);                           if (partial == null) return;
+        partial = partial.instance(target);                         if (partial == null) return;
         var method = partial["parameter" + property + "Changed"];   if (method == null) return;
         method.call(partial);
     },
@@ -4527,67 +4537,16 @@ ORBEON.xforms.Init = {
         var resourcesBaseURL = null;
         var xformsServerURL = null;
 
-        // Try scripts
-        for (var scriptIndex = 0; scriptIndex < scripts.length; scriptIndex++) {
-            var script = scripts[scriptIndex];
-            var scriptSrc = ORBEON.util.Dom.getAttribute(script, "src");
-            if (scriptSrc != null) {
-                var startPathToJavaScript = scriptSrc.indexOf(PATH_TO_JAVASCRIPT_1);
-                if (startPathToJavaScript != -1) {
-                    // Found path to non-xforms-server resource
-                    // scriptSrc: (/context)(/version)/ops/javascript/xforms-min.js
-
-                    // Take the part of the path before the JS path
-                    // prefix: (/context)(/version)
-                    // NOTE: may be "" if no context is present
-                    var prefix = scriptSrc.substr(0, startPathToJavaScript);
-                    resourcesBaseURL = prefix;
-                    if (versioned) {
-                        // Remove version
-                        xformsServerURL = prefix.substring(0, prefix.lastIndexOf("/")) + XFORMS_SERVER_PATH;
-                    } else {
-                        xformsServerURL = prefix + XFORMS_SERVER_PATH;
-                    }
-
-                    break;
-                } else {
-                    startPathToJavaScript = scriptSrc.indexOf(PATH_TO_JAVASCRIPT_2);
-                    if (startPathToJavaScript != -1) {
-                        // Found path to xforms-server resource
-                        // scriptSrc: (/context)/xforms-server(/version)/xforms-...-min.js
-
-                        // Take the part of the path before the JS path
-                        // prefix: (/context)
-                        // NOTE: may be "" if no context is present
-                        var prefix = scriptSrc.substr(0, startPathToJavaScript);
-                        var jsPath = scriptSrc.substr(startPathToJavaScript);
-                        if (versioned) {
-
-                            var bits = /^(\/[^\/]+)(\/[^\/]+)(\/.*)$/.exec(jsPath);
-                            var version = bits[2];
-
-                            resourcesBaseURL = prefix + version;
-                            xformsServerURL = prefix + XFORMS_SERVER_PATH;
-                        } else {
-                            resourcesBaseURL = prefix;
-                            xformsServerURL = prefix + XFORMS_SERVER_PATH;
-                        }
-
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (resourcesBaseURL == null) {
-            if (!(window.orbeonInitData === undefined)) {
-                // Try values passed by server (in portlet mode)
-                // NOTE: We try this second as of 2010-08-27 server always puts these in
-                var formInitData = window.orbeonInitData[formID];
-                if (formInitData && formInitData["paths"]) {
-                    resourcesBaseURL = formInitData["paths"]["resources-base"];
-                    xformsServerURL = formInitData["paths"]["xforms-server"];
-                }
+        if (!(window.orbeonInitData === undefined)) {
+            // NOTE: We switched back and forth between trusting the client or the server on this. Starting 2010-08-27
+            // the server provides the info. Starting 2011-10-05 we revert to using the server values instead of client
+            // detection, as that works in portals. The concern with using the server values was proxying. But should
+            // proxying be able to change the path itself? If so, wouldn't other things break anyway? So for now
+            // server values it is.
+            var formInitData = window.orbeonInitData[formID];
+            if (formInitData && formInitData["paths"]) {
+                resourcesBaseURL = formInitData["paths"]["resources-base"];
+                xformsServerURL = formInitData["paths"]["xforms-server"];
             }
         }
 
@@ -4721,7 +4680,7 @@ ORBEON.xforms.Init = {
             // Create minimal dialog
             yuiDialog = new YAHOO.widget.Dialog(dialog.id, {
                 modal: isModal,
-                close: false,
+                close: hasClose,
                 visible: false,
                 draggable: false,
                 fixedcenter: false,
@@ -4745,10 +4704,10 @@ ORBEON.xforms.Init = {
                 usearia: ORBEON.util.Properties.useARIA.get(),
                 role: "" // See bug 315634 http://goo.gl/54vzd
             });
-			yuiDialog.showEvent.subscribe(ORBEON.xforms.Events.dialogShow, dialog.id);
-            // Register listener for when the dialog is closed by a click on the "x"
-            yuiDialog.beforeHideEvent.subscribe(ORBEON.xforms.Events.dialogClose, dialog.id);
         }
+        yuiDialog.showEvent.subscribe(ORBEON.xforms.Events.dialogShow, dialog.id);
+        // Register listener for when the dialog is closed by a click on the "x"
+        yuiDialog.beforeHideEvent.subscribe(ORBEON.xforms.Events.dialogClose, dialog.id);
 
         // This is for JAWS to read the content of the dialog (otherwise it just reads the button)
         var dialogDiv = YAHOO.util.Dom.getElementsByClassName("xforms-dialog", "div", yuiDialog.element)[0];

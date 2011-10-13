@@ -94,7 +94,9 @@
 
 /* Make sure text in trigger does not wrap (leads to non-native widget being used on Firefox) */
 button.xforms-trigger, input.xforms-trigger, .xforms-trigger button, .xforms-trigger input { white-space: nowrap }
-button.xforms-trigger img, .xforms-trigger button img { margin-right: 10px }
+/* Space between the image and the text in a button, only for the buttons bar
+   (not other buttons in the form which might contain just an image) */
+.fr-buttons button.xforms-trigger img, .fr-buttons .xforms-trigger button img { margin-right: 10px }
 
 /* Make the button look like a link for noscript mode */
 /* TODO: add *zoom: 1 for IE? */
@@ -223,13 +225,19 @@ button.xforms-trigger img, .xforms-trigger button img { margin-right: 10px }
     width: 9.5em; *width: 9em
 }
 
-/* Special sizing for expand/collapse buttons */
+/* Special sizing for expand/collapse/refresh buttons */
 .fr-buttons #fr-collapse-all-button .xforms-trigger, .fr-buttons #fr-expand-all-button .xforms-trigger, .fr-buttons #fr-refresh-button .xforms-trigger,
     .fr-buttons #fr-collapse-all-button .xforms-trigger button, .fr-buttons #fr-expand-all-button .xforms-trigger button, .fr-buttons #fr-refresh-button .xforms-trigger button {
-
     min-width: 2em;
     width: 2em;
     padding: 0;
+}
+
+/* Special sizing for new expand/collapse/refresh buttons */
+.fr-buttons #fr-collapse-all-button.xforms-trigger button, .fr-buttons #fr-expand-all-button.xforms-trigger button, .fr-buttons #fr-refresh-button.xforms-trigger button {
+    min-width: 2em;
+    width: 2em;
+    padding: 3px;
 }
 
 .fr-buttons #fr-collapse-all-button img, .fr-buttons #fr-expand-all-button img, .fr-buttons #fr-refresh-button img {
@@ -270,7 +278,11 @@ button.xforms-trigger img, .xforms-trigger button img { margin-right: 10px }
 .fr-repeat-table tr th .xforms-help-image { margin-top: 0 }
 
 .yui-skin-sam .fr-repeat-column-trigger .yui-dt-liner { padding: 4px } /* override YUI */
-.yui-skin-sam .yui-dt .fr-repeat-table th .yui-dt-liner { white-space: normal } /* override YUI as this is not a datatable, so allow repeat th text to wrap */
+.yui-skin-sam .yui-dt .fr-repeat-table th .yui-dt-liner {
+    white-space: normal;
+    word-wrap: break-word;
+}
+
 .fr-repeat-table .fr-repeat-column-trigger { width: 24px; text-align: center }
 .yui-skin-sam .fr-repeat-table .fr-repeat-column-trigger { vertical-align: middle } /* override YUI */
 .fr-repeat-table .fr-repeat-column-trigger img { margin: 0; display: block }
@@ -292,9 +304,6 @@ button.xforms-trigger img, .xforms-trigger button img { margin-right: 10px }
 .fr-dialog-buttons { text-align: right; padding-right: .5em; padding-top: .5em; padding-bottom: .5em; margin-top: .5em; border-top: 2px solid #DDDDEE; clear: both }
 
 #fr-submission-result-dialog { width: 800px }
-
-/* Hide header bar or minimal appearance dialogs as YUI adds one to panels */
-.xforms-dialog-appearance-minimal .hd { display: none }
 
 /* ***** Sections *************************************************************************************************** */
 

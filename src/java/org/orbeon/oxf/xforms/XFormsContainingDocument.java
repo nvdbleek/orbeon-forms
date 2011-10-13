@@ -30,18 +30,28 @@ import org.orbeon.oxf.xforms.analysis.XPathDependencies;
 import org.orbeon.oxf.xforms.control.XFormsControl;
 import org.orbeon.oxf.xforms.control.XFormsSingleNodeControl;
 import org.orbeon.oxf.xforms.control.controls.XFormsUploadControl;
-import org.orbeon.oxf.xforms.event.*;
+import org.orbeon.oxf.xforms.event.XFormsEvent;
+import org.orbeon.oxf.xforms.event.XFormsEventObserver;
+import org.orbeon.oxf.xforms.event.XFormsEvents;
 import org.orbeon.oxf.xforms.event.events.XXFormsActionErrorEvent;
 import org.orbeon.oxf.xforms.event.events.XXFormsLoadEvent;
+import org.orbeon.oxf.xforms.library.XFormsFunctionLibrary;
 import org.orbeon.oxf.xforms.processor.XFormsServer;
 import org.orbeon.oxf.xforms.processor.XFormsURIResolver;
 import org.orbeon.oxf.xforms.script.ScriptInterpreter;
-import org.orbeon.oxf.xforms.state.*;
-import org.orbeon.oxf.xforms.submission.*;
+import org.orbeon.oxf.xforms.state.XFormsState;
+import org.orbeon.oxf.xforms.state.XFormsStateManager;
+import org.orbeon.oxf.xforms.state.XFormsStaticStateCache;
+import org.orbeon.oxf.xforms.submission.AsynchronousSubmissionManager;
+import org.orbeon.oxf.xforms.submission.SubmissionResult;
+import org.orbeon.oxf.xforms.submission.XFormsModelSubmission;
 import org.orbeon.oxf.xforms.xbl.XBLContainer;
-import org.orbeon.oxf.xml.*;
+import org.orbeon.oxf.xml.ContentHandlerHelper;
+import org.orbeon.oxf.xml.SAXStore;
+import org.orbeon.oxf.xml.TransformerUtils;
 import org.orbeon.oxf.xml.dom4j.Dom4jUtils;
 import org.orbeon.oxf.xml.dom4j.ExtendedLocationData;
+import org.orbeon.saxon.functions.FunctionLibrary;
 import org.orbeon.saxon.om.Item;
 
 import java.io.IOException;
@@ -98,7 +108,7 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
     private final IndentedLogger indentedLogger = getIndentedLogger(LOGGING_CATEGORY);
 
     // Global XForms function library
-    private static XFormsFunctionLibrary functionLibrary = new XFormsFunctionLibrary();
+    private static FunctionLibrary functionLibrary = XFormsFunctionLibrary.instance();
 
     // Whether this document is currently being initialized
     private boolean isInitializing;
@@ -152,7 +162,7 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
     /**
      * Return the global function library.
      */
-    public static XFormsFunctionLibrary getFunctionLibrary() {
+    public static FunctionLibrary getFunctionLibrary() {
         return functionLibrary;
     }
 
@@ -238,7 +248,7 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
         }
 
         this.containerType = request.getContainerType();
-        this.containerNamespace = StringUtils.defaultIfEmpty(externalContext.getResponse().getNamespacePrefix(), "");
+        this.containerNamespace = StringUtils.defaultIfEmpty(externalContext.getRequest().getContainerNamespace(), "");
     }
 
     /**

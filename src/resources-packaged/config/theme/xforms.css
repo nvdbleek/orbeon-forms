@@ -232,6 +232,8 @@ fieldset.xforms-select1-appearance-full { margin: 0; border: none } /* when fiel
 .xforms-select-appearance-full label { vertical-align: middle; margin-right: .5em  }
 fieldset.xforms-select-appearance-full { margin: 0; border: none } /* when fieldset is used for full selection controls */
 
+.xforms-dialog .bd { overflow: auto }
+
 .xforms-group-appearance-xxforms-fieldset {
     padding-left: 1em;
     padding-right: 1em;
@@ -348,6 +350,47 @@ a.xforms-readonly, .xforms-trigger-readonly a { color: gray; cursor: default }
 
 .xforms-repeat-selected-item-4 {
     background-color: #ff3;
+}
+
+/* ***** Orbeon buttons ********************************************************************************************* */
+
+.xforms-trigger button {
+    font-size: 93%;
+    -khtml-border-radius: 4px;
+    -webkit-border-radius: 4px;
+    background: #DDD url(../../ops/yui/assets/skins/sam/sprite.png) repeat-x 0 0;
+    border-color: #BBB #BBB #999;
+    border-radius: 4px;
+    border-style: solid;
+    border-width: 1px;
+    cursor: pointer;
+    display: inline-block;
+    margin: 0;
+    overflow: visible;
+    padding: 3px 9px 3px 9px;
+    text-shadow: 0 1px #F0F0F0;
+    color: #333!important;
+    -moz-box-shadow: 0 1px 0 #f8f8f8;
+    -wekbit-box-shadow: 0 1px 0 #f8f8f8;
+    box-shadow: 0 1px 0 #f8f8f8;
+}
+
+.xforms-trigger button:hover,
+.xforms-trigger button:focus {
+    background-position: 0 -6px;
+    border-color: #999 #999 #666;
+    color: black;
+    text-decoration: none;
+}
+
+.xforms-trigger.xforms-readonly button,
+.xforms-trigger.xforms-readonly button:hover {
+    background: #DDD url(../../ops/yui/assets/skins/sam/sprite.png) repeat-x 0 0;
+    background-position: 0 -1501px;         /* Lighter grey when readonly */
+    border-color: #CCC;
+    cursor: default;
+    color: #AAA!important;
+    text-shadow: none;
 }
 
 /* ***** Indicators and messages ************************************************************************************ */

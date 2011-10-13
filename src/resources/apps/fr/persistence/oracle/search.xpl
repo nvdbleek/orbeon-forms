@@ -23,7 +23,6 @@
         xmlns:xforms="http://www.w3.org/2002/xforms"
         xmlns:xxforms="http://orbeon.org/oxf/xml/xforms"
         xmlns:ev="http://www.w3.org/2001/xml-events"
-        xmlns:pipeline="java:org.orbeon.oxf.processor.pipeline.PipelineFunctionLibrary"
         xmlns:f="http//www.orbeon.com/function">
 
     <!--
@@ -131,7 +130,7 @@
                                         </xsl:for-each>
                                         <!-- Condition for free text search -->
                                         <xsl:if test="/search/query[empty(@path) and normalize-space() != '']">
-                                             and contains(data.xml, <sql:param type="xs:string" select="concat('%', /search/query[not(@path)], '%')"/>) > 0
+                                             and contains(data.xml, '<xsl:value-of select="f:escape-sql(concat('%', replace(/search/query[not(@path)], '_', '\\_'), '%'))"/>') > 0
                                         </xsl:if>
                                     order by created desc
                                 </xsl:variable>

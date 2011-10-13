@@ -11,9 +11,9 @@
  *
  * The full text of the license is available at http://www.gnu.org/copyleft/lesser.html
  */
-package org.orbeon.oxf.processor.pipeline.functions;
+package org.orbeon.oxf.xforms.function.xxforms;
 
-import org.orbeon.oxf.pipeline.StaticExternalContext;
+import org.orbeon.oxf.util.NetUtils;
 import org.orbeon.saxon.expr.Expression;
 import org.orbeon.saxon.expr.ExpressionVisitor;
 import org.orbeon.saxon.expr.XPathContext;
@@ -22,7 +22,7 @@ import org.orbeon.saxon.om.Item;
 import org.orbeon.saxon.trans.XPathException;
 import org.orbeon.saxon.value.StringValue;
 
-public class RewriteResourceURI extends SystemFunction {
+public class XXFormsRewriteResourceURI extends SystemFunction {
 
     /**
      * preEvaluate: this method suppresses compile-time evaluation by doing nothing
@@ -51,6 +51,6 @@ public class RewriteResourceURI extends SystemFunction {
     }
 
     public static String rewriteResourceURI(String uri, boolean absolute) {
-        return StaticExternalContext.rewriteResourceURL(uri, absolute);
+        return NetUtils.getExternalContext().getResponse().rewriteResourceURL(uri, absolute);
     }
 }

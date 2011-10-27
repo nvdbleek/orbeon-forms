@@ -115,8 +115,8 @@
                 <p:when test="not(starts-with(/request/request-path, '/xforms-renderer') and not(p:property('oxf.epilogue.renderer-rewrite')))">
                     <!-- Rewriting -->
                     <p:processor name="oxf:xhtml-rewrite">
-                        <p:input name="rewrite-in" href="#themed-data"/>
-                        <p:output name="rewrite-out" id="rewritten-data"/>
+                        <p:input name="data" href="#themed-data"/>
+                        <p:output name="data" id="rewritten-data"/>
                     </p:processor>
                 </p:when>
                 <p:otherwise>
@@ -298,7 +298,7 @@
             </p:processor>
         </p:when>
         <!-- XSL-FO detection. Use the XSL-FO serializer -->
-        <p:when test="/fo:root">
+        <p:when test="p:property('oxf.epilogue.process-xslfo') and /fo:root">
             <p:processor name="oxf:xslfo-converter">
                 <p:input name="config"><config/></p:input>
                 <p:input name="data" href="#xformed-data"/>

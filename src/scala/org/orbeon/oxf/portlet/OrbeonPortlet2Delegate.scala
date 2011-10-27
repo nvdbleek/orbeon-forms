@@ -27,15 +27,21 @@ import org.orbeon.oxf.properties.Properties
 import org.orbeon.oxf.xforms.XFormsProperties
 import org.orbeon.oxf.xforms.processor.{ResourcesAggregator, XFormsFeatures}
 import collection.mutable.LinkedHashSet
-import org.orbeon.oxf.externalcontext.{WSRPURLRewriter, AsyncRequest, AsyncExternalContext}
-import org.orbeon.oxf.pipeline.api.ExternalContext.Response
 import OrbeonPortlet2Delegate._
 import org.orbeon.oxf.util.{DynamicVariable, URLRewriterUtils, NetUtils}
+import org.orbeon.oxf.externalcontext.{URLRewriter, WSRPURLRewriter, AsyncRequest, AsyncExternalContext}
 
 /**
  * Orbeon portlet.
  *
- * TODO: Support writing render/resource directly without buffering.
+ * Ideas for improvements:
+ *
+ * - support writing render/resource directly without buffering when possible (not action or async load)
+ * - warning message if user is re-rendering a page which is the result of an action
+ * - implement async loading for processAction
+ * - implement improved caching of page with replay of XForms events, see:
+ *   http://wiki.orbeon.com/forms/projects/xforms-improved-portlet-support#TOC-XForms-aware-caching-of-portlet-out
+ * - merge front-end with proxy portlet, as some of the logic is the same
  */
 class OrbeonPortlet2Delegate extends OrbeonPortlet2DelegateBase {
 
@@ -52,13 +58,26 @@ class OrbeonPortlet2Delegate extends OrbeonPortlet2DelegateBase {
     // Portlet action
     override def processAction(request: ActionRequest, response: ActionResponse) =
         currentPortlet.withValue(this) {
+            // NOTE: For now, action is processed synchronously even if isAsyncPortletLoad == true. Steps to change this:
+            // - fix AsyncRequest which doesn't handle the body
+            // - use doRenderAsync
             doProcessAction(request, response)
         }
 
     // Portlet render
     override def render(request: RenderRequest, response: RenderResponse) =
-        currentPortlet.withValue(this) {
-            renderFunction(request, response)
+        getResponseWithParameters(request) match {
+            case Some(responseWithParameters) if toScalaMap(request.getParameterMap) == responseWithParameters.parameters ⇒
+                // The result of an action with the current parameters is available
+                // NOTE: Until we can correctly handle multiple render requests for an XForms page, we should detect the
+                // situation where a second render request tries to load a deferred action response, and display an
+                // error message.
+                writeResponseWithParameters(request, response, responseWithParameters)
+            case _ ⇒
+                // No action result, call the render function
+                currentPortlet.withValue(this) {
+                    renderFunction(request, response)
+                }
         }
 
     // Portlet resource
@@ -68,7 +87,7 @@ class OrbeonPortlet2Delegate extends OrbeonPortlet2DelegateBase {
         }
 
     // Immutable response content which can safely be stored and passed around
-    case class ResponseWithParameters(
+    private case class ResponseWithParameters(
         responseData: String Either Array[Byte],
         contentType: Option[String],
         title: Option[String],
@@ -78,42 +97,36 @@ class OrbeonPortlet2Delegate extends OrbeonPortlet2DelegateBase {
             this(getResponseData(response), Option(response.getContentType), Option(response.getTitle), parameters)
     }
 
-    def tryStoringRenderResponse = Properties.instance.getPropertySet.getBoolean("test.store-render", false)
+    private def tryStoringRenderResponse = Properties.instance.getPropertySet.getBoolean("test.store-render", false)
+
+    private def writeResponseWithParameters(request: RenderRequest, response: RenderResponse, responseWithParameters: ResponseWithParameters) {
+        // Set title and content type
+        responseWithParameters.title orElse Option(getTitle(request)) foreach (response.setTitle(_))
+        responseWithParameters.contentType foreach (response.setContentType(_))
+
+        // Write response out directly
+        write(response, responseWithParameters.responseData, responseWithParameters.contentType)
+    }
 
     private def doRenderDirectly(request: RenderRequest, response: RenderResponse): Unit =
         try {
-            val responseWithParameters =
-                getResponseWithParameters(request) match {
-                    case Some(responseWithParameters) if toScalaMap(request.getParameterMap) == responseWithParameters.parameters ⇒
-                        // The result of an action with the current parameters was a
-                        // stream that we cached. Replay that stream and replace URLs.
-                        // CHECK: what about mode / state? If they change, we ignore them totally.
-                        responseWithParameters
-                    case _ ⇒
-                        val pipelineContext = new PipelineContext
-                        val externalContext = new Portlet2ExternalContext(pipelineContext, getPortletContext, contextInitParameters.asJava, request, response)
+            val pipelineContext = new PipelineContext
+            val externalContext = new Portlet2ExternalContext(pipelineContext, getPortletContext, contextInitParameters.asJava, request, response)
 
-                        // Run the service
-                        processorService.service(externalContext, pipelineContext)
+            // Run the service
+            processorService.service(externalContext, pipelineContext)
 
-                        // NOTE: The response is also buffered, because our rewriting algorithm only operates on strings.
-                        // This could be changed.
-                        val actualResponse = externalContext.getResponse.asInstanceOf[BufferedResponse]
-                        (getResponseData(actualResponse), Option(actualResponse.getContentType), Option(actualResponse.getTitle))
+            // NOTE: The response is also buffered, because our rewriting algorithm only operates on strings.
+            // This could be changed.
+            val actualResponse = externalContext.getResponse.asInstanceOf[BufferedResponse]
+            (getResponseData(actualResponse), Option(actualResponse.getContentType), Option(actualResponse.getTitle))
 
-                        // Store response
-                        val newResponseWithParameters = new ResponseWithParameters(actualResponse, toScalaMap(request.getParameterMap))
-                        if (tryStoringRenderResponse)
-                            setResponseWithParameters(request, newResponseWithParameters)
-                        newResponseWithParameters
-                }
+            // Store response
+            val responseWithParameters = new ResponseWithParameters(actualResponse, toScalaMap(request.getParameterMap))
+            if (tryStoringRenderResponse)
+                setResponseWithParameters(request, responseWithParameters)
             
-            // Set title and content type
-            responseWithParameters.title orElse Option(getTitle(request)) foreach (response.setTitle(_))
-            responseWithParameters.contentType foreach (response.setContentType(_))
-
-            // Write response out directly
-            write(response, responseWithParameters.responseData, responseWithParameters.contentType)
+            writeResponseWithParameters(request, response, responseWithParameters)
         } catch {
             case e: Exception ⇒ throw new PortletException(OXFException.getRootThrowable(e))
         }
@@ -130,7 +143,7 @@ class OrbeonPortlet2Delegate extends OrbeonPortlet2DelegateBase {
             writer.write("""<script type="text/javascript" src="""")
 
             def rewrite(path: String) =
-                rewriter.rewriteResourceURL(path, Response.REWRITE_MODE_ABSOLUTE_PATH) // NOTE: mode is ignored
+                rewriter.rewriteResourceURL(path, URLRewriter.REWRITE_MODE_ABSOLUTE_PATH) // NOTE: mode is ignored
 
             val resources = LinkedHashSet(XFormsFeatures.getAsyncPortletLoadScripts map (_.getResourcePath(isMinimal)): _*)
             ResourcesAggregator.aggregate(resources, false, path ⇒ WSRP2Utils.write(response, rewrite(path), shortIdNamespace(response, getPortletContext), false))
@@ -149,44 +162,37 @@ class OrbeonPortlet2Delegate extends OrbeonPortlet2DelegateBase {
 
     private def doRenderAsync(request: RenderRequest, response: RenderResponse, renderHTML: (RenderRequest, RenderResponse) ⇒ Unit): Unit =
         try {
-            // Call block
-            val title = {
-                // Schedule a future to provide new content
+            // Make sure any content is removed, as serveContentAsync checks for this
+            if (tryStoringRenderResponse)
+                clearResponseWithParameters(request)
 
-                // Make sure any content is removed, as serveContentAsync checks for this
-                if (tryStoringRenderResponse)
-                    clearResponseWithParameters(request)
-
-                // Create a temporary Portlet2ExternalContext just so we can wrap its request into an AsyncRequest
-                val asyncRequest = {
-                    val pipelineContext = new PipelineContext
-                    try new AsyncRequest(new Portlet2ExternalContext(pipelineContext, getPortletContext, contextInitParameters.asJava, request, response).getRequest)
-                    finally pipelineContext.destroy(true)
-                }
-
-                val futureResponse =
-                    future {
-                        val newPipelineContext = new PipelineContext
-                        val asyncExternalContext = new AsyncExternalContext(asyncRequest, new BufferedResponse(newPipelineContext, asyncRequest))
-                        newPipelineContext.setAttribute(PipelineContext.EXTERNAL_CONTEXT, asyncExternalContext)
-
-                        // Run the service
-                        processorService.service(asyncExternalContext, newPipelineContext)
-
-                        // Store response
-                        val actualResponse = asyncExternalContext.getResponse.asInstanceOf[BufferedResponse]
-                        new ResponseWithParameters(actualResponse, toScalaMap(request.getParameterMap))
-                    }
-
-                setFutureResponse(request, futureResponse)
-
-                None // no title available at this point
+            // Create a temporary Portlet2ExternalContext just so we can wrap its request into an AsyncRequest
+            val asyncRequest = {
+                val pipelineContext = new PipelineContext
+                try new AsyncRequest(new Portlet2ExternalContext(pipelineContext, getPortletContext, contextInitParameters.asJava, request, response).getRequest)
+                finally pipelineContext.destroy(true)
             }
 
-            title orElse Option(getTitle(request)) foreach (response.setTitle(_))
-            response.setContentType("text/html")
+            // Schedule a future to provide new content
+            val futureResponse =
+                future {
+                    val newPipelineContext = new PipelineContext
+                    val asyncExternalContext = new AsyncExternalContext(asyncRequest, new BufferedResponse(newPipelineContext, asyncRequest))
+                    newPipelineContext.setAttribute(PipelineContext.EXTERNAL_CONTEXT, asyncExternalContext)
+
+                    // Run the service
+                    processorService.service(asyncExternalContext, newPipelineContext)
+
+                    // Store response
+                    val actualResponse = asyncExternalContext.getResponse.asInstanceOf[BufferedResponse]
+                    new ResponseWithParameters(actualResponse, toScalaMap(request.getParameterMap))
+                }
+
+            setFutureResponse(request, futureResponse)
 
             // Output the  HTML
+            Option(getTitle(request)) foreach (response.setTitle(_))
+            response.setContentType("text/html")
             renderHTML(request, response)
 
         } catch {
@@ -201,7 +207,7 @@ class OrbeonPortlet2Delegate extends OrbeonPortlet2DelegateBase {
     private def serveContentAsync(request: ResourceRequest, response: ResourceResponse): Unit =
         getResponseWithParameters(request) match {
             case Some(responseWithParameters) if toScalaMap(request.getParameterMap) == responseWithParameters.parameters ⇒
-                // Content for action response is already available
+                // The result of an action with the current parameters is available
                 writeResponseAsResource(responseWithParameters, request, response)
             case _ ⇒
                 // Get content from future
@@ -238,7 +244,7 @@ class OrbeonPortlet2Delegate extends OrbeonPortlet2DelegateBase {
             case e: Exception ⇒ throw new PortletException(OXFException.getRootThrowable(e))
         }
 
-    def doProcessAction(request: ActionRequest, response: ActionResponse): Unit =
+    private def doProcessAction(request: ActionRequest, response: ActionResponse): Unit =
         try {
             // Make sure the previously cached output is cleared, if there is any. We keep the result of only one action.
             clearResponseWithParameters(request)
@@ -268,12 +274,16 @@ class OrbeonPortlet2Delegate extends OrbeonPortlet2DelegateBase {
                 }
             } else if (bufferedResponse.hasContent) {
                 // Content was written, keep it in the session for subsequent render requests with the current action parameters
-                val updatedRenderParameters = request.getParameterMap.asScala.toMap + ("orbeon.method" → Array("post")) asJava
-                
-                response.setRenderParameters(updatedRenderParameters)
+
+                // NOTE: Don't use the action parameters, as in the case of a form POST there can be dozens of those
+                // or more, and anyway those don't make sense as subsequent render parameters. Instead, we just use
+                // the path and a method indicator. Later we should either indicate an error, or handle XForms Ajax
+                // updates properly.
+                val newRenderParameters = Map(PathParameter → Array(request.getParameter(PathParameter)), MethodParameter → Array("post")).asJava
+                response.setRenderParameters(newRenderParameters)
 
                 // Store response
-                setResponseWithParameters(request, new ResponseWithParameters(bufferedResponse, toScalaMap(updatedRenderParameters)))
+                setResponseWithParameters(request, new ResponseWithParameters(bufferedResponse, toScalaMap(newRenderParameters)))
             } else {
                 // Nothing happened, throw an exception (or should we just ignore?)
                 throw new IllegalStateException("Processor execution did not return content or issue a redirect.")
@@ -311,10 +321,6 @@ class OrbeonPortlet2Delegate extends OrbeonPortlet2DelegateBase {
         else
             throw new IllegalStateException("Processor execution did not return content.")
 
-    // Convert to immutable String → List[String] so that map equality works as expected
-    def toScalaMap(m: JMap[String, Array[String]]) =
-        m.asScala map { case (k, v) ⇒ k → v.toList } toMap
-
     private def getResponseWithParameters(request: PortletRequest) =
         Option(request.getPortletSession.getAttribute(ResponseSessionKey).asInstanceOf[ResponseWithParameters])
 
@@ -336,7 +342,14 @@ class OrbeonPortlet2Delegate extends OrbeonPortlet2DelegateBase {
 
 object OrbeonPortlet2Delegate {
 
+    val PathParameter = "orbeon.path"
+    val MethodParameter = "orbeon.method"
+
     val currentPortlet = new DynamicVariable[OrbeonPortlet2Delegate]
+
+    // Convert to immutable String → List[String] so that map equality works as expected
+    def toScalaMap(m: JMap[String, Array[String]]) =
+        m.asScala map { case (k, v) ⇒ k → v.toList } toMap
 
     // Immutable portletNamespace → idNamespace information stored in the portlet context
     private object NamespaceMappings {

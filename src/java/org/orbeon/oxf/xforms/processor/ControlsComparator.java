@@ -27,6 +27,9 @@ import org.orbeon.oxf.xforms.control.XFormsControl;
 import org.orbeon.oxf.xforms.control.controls.XFormsRepeatControl;
 import org.orbeon.oxf.xforms.control.controls.XXFormsDynamicControl;
 import org.orbeon.oxf.xforms.processor.handlers.*;
+import org.orbeon.oxf.xforms.processor.handlers.xhtml.XHTMLBodyHandler;
+import org.orbeon.oxf.xforms.processor.handlers.xhtml.XHTMLElementHandler;
+import org.orbeon.oxf.xforms.processor.handlers.xhtml.XXFormsAttributeHandler;
 import org.orbeon.oxf.xml.*;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.AttributesImpl;
@@ -340,7 +343,7 @@ public class ControlsComparator {
             // So for now, perform simple steps here, and later this can be revisited.
             //
             final ExternalContext externalContext = NetUtils.getExternalContext();
-            controller.setOutput(new DeferredXMLReceiverImpl(new XHTMLRewrite().getRewriteXMLReceiver(externalContext,
+            controller.setOutput(new DeferredXMLReceiverImpl(new XHTMLRewrite().getRewriteXMLReceiver(externalContext.getResponse(),
                     new HTMLFragmentSerializer(new ContentHandlerWriter(ch.getXmlReceiver()), true), true)));// NOTE: skip the root element
 
             // Create handler context

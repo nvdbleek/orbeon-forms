@@ -204,9 +204,14 @@ button.xforms-trigger-appearance-xxforms-minimal::-moz-focus-inner, .xforms-trig
     -moz-box-sizing: border-box; -webkit-box-sizing: border-box; box-sizing: border-box;
 }
 
+.xforms-placeholder input {
+    color: #bbb;
+}
+
 .xforms-form .xforms-textarea, .xforms-textarea textarea {
     -moz-box-sizing: border-box; -webkit-box-sizing: border-box; box-sizing: border-box;
-    font-family: Arial,Helvetica,Geneva,sans-serif
+    font-family: Arial,Helvetica,Geneva,sans-serif;
+    -webkit-overflow-scrolling: touch; /* Only supported by iOS 5, but should be good too if it becomes supported in the future by browsers on OS X */
 }
 
 .xforms-secret, .xforms-secret input {
@@ -332,6 +337,11 @@ a.xforms-readonly, .xforms-trigger-readonly a { color: gray; cursor: default }
     margin-right: 0.4em;
 	top: -7px;
 	width: 25px;
+}
+
+.yui-skin-sam .xforms-select1-appearance-xxforms-menu .yuimenubaritemlabel {
+    border: 0;                                  /* Override border set in YUI's menu.css, which creates a thicker border around the menu bar titles on iOS */
+    padding-top: 2px; padding-bottom: 2px;      /* Compensate for the lost border by adding some padding */
 }
 
 /* ***** Repeats **************************************************************************************************** */
@@ -485,3 +495,7 @@ a.ygtvlabel { cursor: pointer; }
 #xforms-form .xforms-width-15em input.xforms-input-input,
     #xforms-form input.xforms-width-15em,
     #xforms-form select.xforms-width-15em, #xforms-form .xforms-width-15em select { width: 15em }
+
+@media print {
+    .xforms-form .xforms-loading-loading { display: none }
+}

@@ -16,18 +16,13 @@ package org.orbeon.oxf.xforms.xbl
 import org.orbeon.oxf.xml.dom4j.Dom4jUtils
 import org.dom4j.{Document, QName, Element}
 import org.orbeon.oxf.xforms._
+import control.{XFormsComponentControl, XFormsControl, XFormsControlFactory}
 import org.orbeon.oxf.xforms.XFormsConstants._
-import analysis.IdGenerator
 import collection.JavaConversions._
 import scala.collection.JavaConverters._
 import org.orbeon.oxf.xml.NamespaceMapping
-import org.orbeon.scaxon.XML
-import org.orbeon.oxf.processor.pipeline.{PipelineProcessor, PipelineReader}
-import org.orbeon.oxf.util.PipelineUtils
 import org.orbeon.oxf.common.OXFException
-import org.orbeon.oxf.processor.generator.DOMGenerator
-import org.orbeon.oxf.processor.DOMSerializer
-import org.orbeon.oxf.pipeline.api.PipelineContext
+import java.util.{Map => JMap}
 
 // Holds details of an xbl:xbl/xbl:binding
 case class AbstractBinding(
@@ -56,75 +51,16 @@ case class AbstractBinding(
         for {
             transformQName <- transformQNameOption
             templateRoot <- templateRootOption
-        } yield {
-            // Create reusable pipeline config
-            val pipelineConfig = {
-                val pipeline = XML.elemToDom4j(
-                    <p:config xmlns:p="http://www.orbeon.com/oxf/pipeline"
-                              xmlns:oxf="http://www.orbeon.com/oxf/processors">
-
-                        <p:param type="input" name="transform"/>
-                        <p:param type="input" name="data"/>
-                        <p:param type="output" name="data"/>
-
-                        <p:processor name={transformQName.getQualifiedName}><!-- namespace for QName might not be in scope! -->
-                            <p:input name="config" href="#transform"/>
-                            <p:input name="data" href="#data"/>
-                            <p:output name="data" ref="data"/>
-                        </p:processor>
-
-                    </p:config>)
-
-                val ast = PipelineReader.readPipeline(pipeline, lastModified)
-                PipelineProcessor.createConfigFromAST(ast)
-            }
-
-            // Create transform input separately to help with namespaces (easier with a separate document)
-            val domGeneratorConfig = PipelineUtils.createDOMGenerator(
-                Dom4jUtils.createDocumentCopyParentNamespaces(templateRoot),
-                "xbl-transform-config",
-                lastModified,
-                Dom4jUtils.makeSystemId(templateRoot)
-            )
-
-            (pipelineConfig, domGeneratorConfig)
-        }
+        } yield
+            Transform.createTransformConfig(transformQName, templateRoot, lastModified)
 
     // A transform cannot be reused, so this creates a new one when called, based on the config
     def newTransform(boundElement: Element) = transformConfig map {
         case (pipelineConfig, domGeneratorConfig) =>
-            val pipeline = new PipelineProcessor(pipelineConfig)
-            PipelineUtils.connect(domGeneratorConfig, "data", pipeline, "transform")
-
-            // Connect the bound element to the processor data input
-            val domGeneratorData = PipelineUtils.createDOMGenerator(
-                Dom4jUtils.createDocumentCopyParentNamespaces(boundElement),
-                "xbl-transform-data",
-                DOMGenerator.ZeroValidity,
-                Dom4jUtils.makeSystemId(boundElement)
-            )
-            PipelineUtils.connect(domGeneratorData, "data", pipeline, "data")
-
-            // Connect a DOM serializer to the processor data output
-            val domSerializerData = new DOMSerializer
-            PipelineUtils.connect(pipeline, "data", domSerializerData, "data")
-
             // Run the transformation
-            val newPipelineContext = new PipelineContext
-            var success = false
-            val generatedDocument =
-                try {
-                    pipeline.reset(newPipelineContext)
-                    domSerializerData.start(newPipelineContext)
+            val generatedDocument = Transform.transformBoundElement(pipelineConfig, domGeneratorConfig, boundElement)
 
-                    // Get the result, move its root element into a xbl:template and return it
-                    val result = domSerializerData.getDocument(newPipelineContext)
-                    success = true
-                    result
-                } finally {
-                    newPipelineContext.destroy(success)
-                }
-
+            // Repackage the result
             val generatedRootElement = generatedDocument.getRootElement.detach.asInstanceOf[Element]
             generatedDocument.addElement(new QName("template", XFormsConstants.XBL_NAMESPACE, "xbl:template"))
             val newRoot = generatedDocument.getRootElement
@@ -133,11 +69,17 @@ case class AbstractBinding(
 
             generatedDocument
     }
+    
+    def createFactory =
+        new XFormsControlFactory.Factory {
+            def createXFormsControl(container: XBLContainer, parent: XFormsControl, element: Element, name: String, effectiveId: String, state: JMap[String, Element]) =
+                new XFormsComponentControl(container, parent, element, name, effectiveId)
+        }
 }
 
 object AbstractBinding {
     // Construct an AbstractBinding
-    def apply(bindingElement: Element, lastModified: Long, scripts: Seq[Element], namespaceMapping: NamespaceMapping, idGenerator: IdGenerator) = {
+    def apply(bindingElement: Element, lastModified: Long, scripts: Seq[Element], namespaceMapping: NamespaceMapping) = {
 
         assert(bindingElement ne null)
 
@@ -145,10 +87,7 @@ object AbstractBinding {
             Dom4jUtils.elements(parentElement, XFORMS_MODEL_QNAME).asScala map
                 (Dom4jUtils.createDocumentCopyParentNamespaces(_, detach))
 
-        val bindingId = {
-            val existingBindingId = XFormsUtils.getElementStaticId(bindingElement)
-            Option(existingBindingId) orElse (Option(idGenerator) map (_.getNextId))
-        }
+        val bindingId = Option(XFormsUtils.getElementStaticId(bindingElement))
 
         val styles =
             for {
@@ -177,8 +116,25 @@ object AbstractBinding {
         new AbstractBinding(qNameMatch(bindingElement, namespaceMapping), bindingElement, lastModified, bindingId, scripts, styles, handlers, implementations, global)
     }
 
-    def qNameMatch(bindingElement: Element, namespaceMapping: NamespaceMapping) = {
+    private def qNameMatch(bindingElement: Element, namespaceMapping: NamespaceMapping) = {
         val elementAttribute = bindingElement.attributeValue(ELEMENT_QNAME)
         Dom4jUtils.extractTextValueQName(namespaceMapping.mapping, elementAttribute.replace('|', ':'), true)
+    }
+
+    // Find a cached abstract binding or create and cache a new one
+    def findOrCreate(path: Option[String], bindingElement: Element, lastModified: Long, scripts: Seq[Element], namespaceMapping: NamespaceMapping) = {
+
+        val qName = qNameMatch(bindingElement, namespaceMapping)
+
+        path flatMap (BindingCache.get(_, qName, lastModified)) match {
+            case Some(cachedBinding) =>
+                // Found in cache
+                cachedBinding
+            case None =>
+                val newBinding = AbstractBinding(bindingElement, lastModified, scripts, namespaceMapping)
+                // Cache binding
+                path foreach (BindingCache.put(_, qName, lastModified, newBinding))
+                newBinding
+        }
     }
 }

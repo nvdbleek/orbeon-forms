@@ -13,7 +13,7 @@
  */
 package org.orbeon.oxf.xforms.action
 
-import actions.{XFormsDeleteAction, XFormsInsertAction, XFormsSetvalueAction}
+import actions.{XFormsSetindexAction, XFormsDeleteAction, XFormsInsertAction, XFormsSetvalueAction}
 import collection.JavaConverters._
 import org.orbeon.saxon.om._
 import java.util.{List => JList}
@@ -54,6 +54,17 @@ object XFormsAPI {
         } else
             None
     }
+
+    // Setindex
+    // @return:
+    //
+    // - None        if the control is not found
+    // - Some(0)     if the control is non-relevant or doesn't have any iterations
+    // - Some(index) otherwise, where index is the control's new index
+    def setindex(repeatStaticId: String, index: Int) =
+        actionContext.value map
+            { action => XFormsSetindexAction.executeSetindexAction(action, action.outerActionElement, repeatStaticId, Integer.toString(index)) } collect
+                { case newIndex if newIndex >= 0 => newIndex }
 
     // Insert
     // @return the inserted nodes

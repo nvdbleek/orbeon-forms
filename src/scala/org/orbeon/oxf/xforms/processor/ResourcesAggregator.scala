@@ -29,6 +29,7 @@ import org.orbeon.oxf.xforms._
 import org.dom4j.QName
 import org.apache.commons.lang.StringUtils
 import ResourcesAggregator._
+import org.orbeon.oxf.externalcontext.URLRewriter
 
 /**
  * Aggregate CSS and JS resources under <head>.
@@ -77,7 +78,8 @@ class ResourcesAggregator extends ProcessorImpl {
                         val isSeparateDeployment = URLRewriterUtils.isSeparateDeployment(NetUtils.getExternalContext.getRequest)
 
                         // In this mode, resources are described in JSON within a <div>
-                        val isAsyncPortletLoad = NetUtils.getExternalContext.getRequest.getContainerType == "portlet" && XFormsProperties.isAsyncPortletLoad
+                        val request = NetUtils.getExternalContext.getRequest
+                        val isAsyncPortletLoad = request.getContainerType == "portlet" && XFormsProperties.isAsyncPortletLoad && request.getMethod == "get" // limited to GET for now
                         val isMinimal = XFormsProperties.isMinimalResources
                         val asyncPortletLoadScripts = if (isAsyncPortletLoad) XFormsFeatures.getAsyncPortletLoadScripts map (_.getResourcePath(isMinimal)) else Array.empty[String]
 
@@ -155,7 +157,9 @@ class ResourcesAggregator extends ProcessorImpl {
                             
                             def outputScriptCSSAsJSON() = {
 
-                                def rewritePath(path: String) = NetUtils.getExternalContext.getResponse.rewriteResourceURL(path, false)
+                                // NOTE: oxf:xhtml-rewrite usually takes care of URL rewriting, but not in JSON content.
+                                // So we rewrite here.
+                                def rewritePath(path: String) = NetUtils.getExternalContext.getResponse.rewriteResourceURL(path, URLRewriter.REWRITE_MODE_ABSOLUTE_PATH_OR_RELATIVE)
 
                                 def appendJS(path: String) = """{"src":"""" + rewritePath(path) + """"}"""
                                 def appendCSS(path: String) = """{"src":"""" + rewritePath(path) + """"}"""

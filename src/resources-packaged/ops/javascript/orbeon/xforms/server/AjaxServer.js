@@ -1208,11 +1208,11 @@
                                             { type: "time",     schemaTypes: [ "{http://www.w3.org/2001/XMLSchema}time", "{http://www.w3.org/2002/xforms}time" ], className: "xforms-type-time" },
                                             { type: "dateTime", schemaTypes: [ "{http://www.w3.org/2001/XMLSchema}dateTime", "{http://www.w3.org/2002/xforms}dateTime" ], className: "xforms-type-dateTime" },
                                             { type: "boolean",  schemaTypes: [ "{http://www.w3.org/2001/XMLSchema}boolean", "{http://www.w3.org/2002/xforms}boolean" ], className: "xforms-type-boolean" },
-                                            { type: "string",   schemaTypes: null, className: null }
+                                            { type: "string",   schemaTypes: null, className: "xforms-type-string" }
                                         ];
 
-                                        /** @type {Object} */ var existingType = _.detect(INPUT_TYPES, function(type) { return type.className == null || YAHOO.util.Dom.hasClass(documentElement, type.className); });
-                                        /** @type {Object} */ var newType = _.detect(INPUT_TYPES, function(type) { return type.schemaTypes == null || _.include(type.schemaTypes, newSchemaType); });
+                                        var existingType = _.detect(INPUT_TYPES, function(type) { return type.schemaTypes == null || YAHOO.util.Dom.hasClass(documentElement, type.className); });
+                                        var newType =      _.detect(INPUT_TYPES, function(type) { return type.schemaTypes == null || _.include(type.schemaTypes, newSchemaType); });
                                         if (newType != existingType) {
 
                                             // Remember that this input has be recreated which means we need to update its value
@@ -1223,36 +1223,42 @@
                                             // Minimal control content can be different
                                             var isMinimal = YAHOO.util.Dom.hasClass(documentElement, "xforms-input-appearance-minimal");
 
-                                            // Find the position of the last label before the control "actual content"
-                                            // and remove all elements that are not labels
-                                            var lastLabelPosition = -1;
-                                            var childElements = YAHOO.util.Dom.getChildren(documentElement);
-                                            for (var childIndex = 0; childIndex < childElements.length; childIndex++) {
-                                                var childElement = childElements[childIndex];
-                                                if (! YAHOO.util.Dom.hasClass(childElement, "xforms-label")
-                                                        && ! YAHOO.util.Dom.hasClass(childElement, "xforms-help")
-                                                        && ! YAHOO.util.Dom.hasClass(childElement, "xforms-hint")
-                                                        && ! YAHOO.util.Dom.hasClass(childElement, "xforms-alert")
-                                                        && ! YAHOO.util.Dom.hasClass(childElement, "xforms-help-image")) {
-                                                    documentElement.removeChild(childElement);
-                                                    if (lastLabelPosition == -1)
-                                                        lastLabelPosition = childIndex - 1;
+                                            // Find the position of the last label before the control "actual content" and remove all elements that are not labels
+                                            // A value of -1 means that the content came before any label
+                                            var lastLabelPosition = null;
+                                            (function() {
+                                                var childElements = YAHOO.util.Dom.getChildren(documentElement);
+                                                for (var childIndex = 0; childIndex < childElements.length; childIndex++) {
+                                                    var childElement = childElements[childIndex];
+                                                    if (! YAHOO.util.Dom.hasClass(childElement, "xforms-label")
+                                                            && ! YAHOO.util.Dom.hasClass(childElement, "xforms-help")
+                                                            && ! YAHOO.util.Dom.hasClass(childElement, "xforms-hint")
+                                                            && ! YAHOO.util.Dom.hasClass(childElement, "xforms-alert")
+                                                            && ! YAHOO.util.Dom.hasClass(childElement, "xforms-help-image")) {
+                                                        documentElement.removeChild(childElement);
+                                                        if (lastLabelPosition == null)
+                                                            lastLabelPosition = childIndex - 1;
+                                                    }
                                                 }
-                                            }
+                                            })();
 
                                             function insertIntoDocument(nodes) {
                                                 if (ORBEON.util.Utils.isNewXHTMLLayout()) {
+                                                    var childElements = YAHOO.util.Dom.getChildren(documentElement);
                                                     // New markup: insert after "last label" (we remembered the position of the label after which there is real content)
-                                                    if (YAHOO.util.Dom.getChildren(documentElement).length == 0) {
+                                                    if (childElements.length == 0) {
                                                         for (var nodeIndex = 0; nodeIndex < nodes.length; nodeIndex++)
                                                             documentElement.appendChild(nodes[nodeIndex]);
                                                     } else if (lastLabelPosition == -1) {
-                                                        var firstChild = YAHOO.util.Dom.getFirstChild(documentElement);
-                                                        for (var nodeIndex = nodes.length - 1; nodeIndex >= 0; nodeIndex--)
+                                                        // Insert before everything else
+                                                        var firstChild = childElements[0];
+                                                        for (var nodeIndex = 0; nodeIndex < nodes.length; nodeIndex++)
                                                             YAHOO.util.Dom.insertBefore(nodes[nodeIndex], firstChild);
                                                     } else {
-                                                        for (var nodeIndex = 0; nodeIndex < nodes.length; nodeIndex++)
-                                                            YAHOO.util.Dom.insertAfter(nodes[nodeIndex], childElements[lastLabelPosition]);
+                                                        // Insert after a LHHA
+                                                        var lhha = childElements[lastLabelPosition];
+                                                        for (var nodeIndex = nodes.length - 1; nodeIndex >= 0; nodeIndex--)
+                                                            YAHOO.util.Dom.insertAfter(nodes[nodeIndex], lhha);
                                                     }
                                                 } else {
                                                     // Old markup: insert in container, which will be empty
@@ -1288,7 +1294,7 @@
                                             } else if (newType.type == "date" && isMinimal) {
                                                 // Create image element
                                                 var image = document.createElement("img");
-                                                image.setAttribute("src", ORBEON.xforms.Globals.resourcesBaseURL[formID] + "/ops/images/xforms/calendar.png");
+                                                image.setAttribute("src", ORBEON.xforms.Globals.calendarImageURL[formID]);
                                                 image.className = "xforms-input-input xforms-type-date xforms-input-appearance-minimal";
                                                 insertIntoDocument([image]);
                                                 YAHOO.util.Dom.addClass(documentElement, "xforms-type-date");
@@ -1401,15 +1407,18 @@
                                                 currentValue = ORBEON.util.String.normalizeSerializedHTML(currentValue);
                                                 newControlValue = ORBEON.util.String.normalizeSerializedHTML(newControlValue);
 
-                                                var isInput = YAHOO.util.Dom.hasClass(documentElement, "xforms-input");
-                                                var inputSize = isInput ? ORBEON.util.Dom.getAttribute(controlElement, "size") : null;
-                                                var inputLength = isInput ? ORBEON.util.Dom.getAttribute(controlElement, "maxlength") : null;
-                                                var inputAutocomplete = isInput ? ORBEON.util.Dom.getAttribute(controlElement, "autocomplete") : null;
+                                                var isInputOrSecret = YAHOO.util.Dom.hasClass(documentElement, "xforms-input")
+                                                    || YAHOO.util.Dom.hasClass(documentElement, "xforms-secret");
+
+                                                var inputSize = isInputOrSecret ? ORBEON.util.Dom.getAttribute(controlElement, "size") : null;
+                                                var inputAutocomplete = isInputOrSecret ? ORBEON.util.Dom.getAttribute(controlElement, "autocomplete") : null;
 
                                                 var isTextarea = YAHOO.util.Dom.hasClass(documentElement, "xforms-textarea");
-                                                var textareaMaxlength = isTextarea ? ORBEON.util.Dom.getAttribute(controlElement, "maxlength") : null;
+
                                                 var textareaCols = isTextarea ? ORBEON.util.Dom.getAttribute(controlElement, "cols") : null;
                                                 var textareaRows = isTextarea ? ORBEON.util.Dom.getAttribute(controlElement, "rows") : null;
+
+                                                var maxlength = (isInputOrSecret || isTextarea) ? ORBEON.util.Dom.getAttribute(controlElement, "maxlength") : null;
 
                                                 var doUpdate =
                                                         // If this was an input that was recreated because of a type change, we always set its value
@@ -1424,18 +1433,18 @@
                                                             && (previousServerValue == null || currentValue == previousServerValue)
                                                         ) ||
                                                         // Special xforms:input attributes
-                                                        (isInput && (inputSize != null || inputLength != null || inputAutocomplete != null)) ||
+                                                        (isInputOrSecret && (inputSize != null || maxlength != null || inputAutocomplete != null)) ||
                                                         // Special xforms:textarea attributes
-                                                        (isTextarea && (textareaMaxlength != null || textareaCols != null || textareaRows != null));
+                                                        (isTextarea && (maxlength != null || textareaCols != null || textareaRows != null));
                                                 if (doUpdate) {
-                                                    if (isInput) {
+                                                    if (isInputOrSecret) {
                                                         // Additional attributes for xforms:input
-                                                        ORBEON.xforms.Controls.setCurrentValue(documentElement, newControlValue, inputSize, inputLength, inputAutocomplete);
+                                                        ORBEON.xforms.Controls.setCurrentValue(documentElement, newControlValue, inputSize, maxlength, inputAutocomplete);
                                                     } else if (isTextarea && YAHOO.util.Dom.hasClass(documentElement, "xforms-mediatype-text-html")) {
                                                         ORBEON.xforms.Controls.setCurrentValue(documentElement, newControlValue);
                                                     } else if (isTextarea) {
                                                         // Additional attributes for xforms:textarea
-                                                        ORBEON.xforms.Controls.setCurrentValue(documentElement, newControlValue, textareaMaxlength, textareaCols, textareaRows);
+                                                        ORBEON.xforms.Controls.setCurrentValue(documentElement, newControlValue, maxlength, textareaCols, textareaRows);
                                                     } else {
                                                         // Other control just have a new value
                                                         ORBEON.xforms.Controls.setCurrentValue(documentElement, newControlValue);

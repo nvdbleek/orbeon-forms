@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
 <!--
     Copyright (C) 2008 Orbeon, Inc.
 
@@ -177,7 +176,7 @@
                                 </xsl:template>
                             </xsl:stylesheet>
                         </p:input>
-                        <p:output name="data" id="converted"/>
+                        <p:output name="data" id="sql-out-converted"/>
                     </p:processor>
                 </p:when>
                 <p:otherwise>
@@ -189,25 +188,85 @@
                                 <xsl:value-of select="/sql-out/data"/>
                             </document>
                         </p:input>
-                        <p:output name="data" id="converted"/>
+                        <p:output name="data" id="sql-out-converted"/>
                     </p:processor>
                 </p:otherwise>
             </p:choose>
 
+            <!-- TODO: Remove code duplication with above -->
+            <p:processor name="oxf:unsafe-xslt">
+                <p:input name="data" href="#request-description"/>
+                <p:input name="config">
+                    <sql:config xsl:version="2.0">
+                        <last-modified>
+                            <sql:connection>
+                                <xsl:copy-of select="/request/sql:datasource"/>
+
+                                <xsl:variable name="is-data" as="xs:boolean" select="/request/type = 'data'"/>
+                                <xsl:variable name="is-attachment" as="xs:boolean" select="not(ends-with(/request/filename, '.xml') or ends-with(/request/filename, '.xhtml'))"/>
+                                <xsl:variable name="table-name" as="xs:string" select="concat(
+                                    if ($is-data) then 'orbeon_form_data' else 'orbeon_form_definition',
+                                    if ($is-attachment) then '_attach' else '')"/>
+
+                                <sql:execute>
+                                    <sql:query>
+                                        select
+                                            last_modified
+                                        from <xsl:value-of select="$table-name"/> t
+                                            where app = <sql:param type="xs:string" select="/request/app"/>
+                                            and form = <sql:param type="xs:string" select="/request/form"/>
+                                            <xsl:if test="$is-data">and document_id = <sql:param type="xs:string" select="/request/document-id"/></xsl:if>
+                                            <xsl:if test="$is-attachment">and file_name = <sql:param type="xs:string" select="/request/filename"/></xsl:if>
+                                            and last_modified = (
+                                                select max(last_modified) from <xsl:value-of select="$table-name"/>
+                                                where app = <sql:param type="xs:string" select="/request/app"/>
+                                                and form = <sql:param type="xs:string" select="/request/form"/>
+                                                <xsl:if test="$is-data">and document_id = <sql:param type="xs:string" select="/request/document-id"/></xsl:if>
+                                                <xsl:if test="$is-attachment">and file_name = <sql:param type="xs:string" select="/request/filename"/></xsl:if>
+                                            )
+                                            <!-- This will prevent request for document that have been deleted to return a delete doc -->
+                                            and deleted = 'N'
+                                    </sql:query>
+                                    <sql:result-set>
+                                        <sql:row-iterator>
+                                            <sql:get-column-value column="last_modified" type="xs:dateTime"/>
+                                        </sql:row-iterator>
+                                    </sql:result-set>
+                                </sql:execute>
+                            </sql:connection>
+                        </last-modified>
+                    </sql:config>
+                </p:input>
+                <p:output name="data" id="sql-validity-config"/>
+            </p:processor>
+
+            <p:processor name="oxf:sql">
+                <p:input name="data" href="#request-description"/>
+                <p:input name="config" href="#sql-validity-config"/>
+                <p:output name="data" id="sql-validity-out"/>
+            </p:processor>
+
+            <!--
+                Cache processor:
+
+                - validity is retrieved from the database
+                - key is the request
+             -->
+            <p:processor name="oxf:cache">
+                <p:input name="data" href="#sql-out-converted"/>
+                <p:input name="key" href="#request"/>
+                <p:input name="validity" href="#sql-validity-out"/>
+                <p:output name="data" id="converted"/>
+            </p:processor>
+
             <!-- Serialize out as is -->
             <p:processor name="oxf:http-serializer">
-                <p:input name="config" transform="oxf:unsafe-xslt" href="#sql-out">
-                    <config xsl:version="2.0">
+                <p:input name="config">
+                    <config>
                         <cache-control>
                             <use-local-cache>false</use-local-cache>
                         </cache-control>
-                        <header>
-                            <name>Last-Modified</name>
-                            <value>
-                                <!-- Format the date -->
-                                <xsl:value-of select="format-dateTime(xs:dateTime(/sql-out/last-modified), '[FNn,*-3], [D] [MNn,*-3] [Y] [H01]:[m01]:[s01] GMT', 'en', (), ()) "/>
-                            </value>
-                        </header>
+                        <!-- NOTE: No need to output Last-Modified header as oxf:cache is providing validity that is used by the serializer -->
                     </config>
                 </p:input>
                 <p:input name="data" href="#converted"/>
@@ -379,63 +438,33 @@
                                                     else concat($app-xml, '_', substring($form-xml, 1, 20 - string-length($app-xml)))
                                                 )"/>
 
-                                            <!-- SQL to drop possibly existing view -->
-                                            <xsl:result-document href="output:drop-sql">
-                                                <xsl:call-template name="update-wrapper">
-                                                    <xsl:with-param name="sql">
-                                                        begin
-                                                            <!-- Drop table catching exception, as Oracle doesn't have a "create or replace view" -->
-                                                            <!-- NOTE: Use "execute immediate", as Oracle doesn't like DDL in PL/SQL -->
-                                                            execute immediate 'drop view <xsl:value-of select="$mv-name"/>';
-                                                        exception
-                                                            <!-- Ignore code -12003, which means the materialized view didn't exist -->
-                                                            <!-- TODO: Change back code to -942 when we switch from views to materialized views -->
-                                                            when others then if sqlcode != -942 then raise; end if;
-                                                        end;
-                                                    </xsl:with-param>
-                                                </xsl:call-template>
-                                            </xsl:result-document>
-
-                                            <!-- SQL to create view -->
-                                            <xsl:result-document href="output:create-sql">
-                                                <xsl:call-template name="update-wrapper">
-                                                    <xsl:with-param name="sql">
-                                                        <xsl:variable name="metadata-column" as="xs:string+" select="('document_id', 'created', 'last_modified', 'username')"/>
-                                                        <xsl:variable name="paths-ids" as="xs:string*" select="f:document-to-paths-ids(/request/document, $metadata-column)"/>
-                                                        create view <xsl:value-of select="$mv-name"/> as
-                                                        select
-                                                            <!-- Metadata columns -->
-                                                            <xsl:value-of select="string-join(for $c in $metadata-column return concat($c, ' ', 'metadata_', $c), ', ')"/>
-                                                            <!-- Columns corresponding to elements in the XML data -->
-                                                            <xsl:for-each select="1 to count($paths-ids) div 2">
-                                                                <xsl:variable name="i" select="position()"/>
-                                                                , extractValue(xml, '/*/<xsl:value-of select="$paths-ids[$i * 2 - 1]"/>')
-                                                                "<xsl:value-of select="$paths-ids[$i * 2]"/>"
-                                                            </xsl:for-each>
-                                                        from (
-                                                            select d.*, dense_rank() over (partition by document_id order by last_modified desc) as latest
-                                                            from orbeon_form_data d
-                                                            where
-                                                                <!-- NOTE: Generate app/form name in SQL, as Oracle doesn't allow bind variables for data definition operations -->
-                                                                app = '<xsl:value-of select="f:escape-sql(/request/app)"/>'
-                                                                and form = '<xsl:value-of select="f:escape-sql(/request/form)"/>'
-                                                            )
-                                                        where latest = 1 and deleted = 'N'
-                                                    </xsl:with-param>
-                                                </xsl:call-template>
-                                            </xsl:result-document>
-                                        </xsl:template>
-
-                                        <!-- Wrap an update statement in the SQL processor boilerplate -->
-                                        <xsl:template name="update-wrapper">
-                                            <xsl:param name="sql"/>
                                             <sql:config>
                                                 <result>
                                                     <sql:connection>
                                                         <xsl:copy-of select="/request/sql:datasource"/>
                                                         <sql:execute>
                                                             <sql:update>
-                                                                <xsl:copy-of select="$sql"/>
+                                                                <xsl:variable name="metadata-column" as="xs:string+" select="('document_id', 'created', 'last_modified', 'username')"/>
+                                                                <xsl:variable name="paths-ids" as="xs:string*" select="f:document-to-paths-ids(/request/document, $metadata-column)"/>
+                                                                create or replace view <xsl:value-of select="$mv-name"/> as
+                                                                select
+                                                                    <!-- Metadata columns -->
+                                                                    <xsl:value-of select="string-join(for $c in $metadata-column return concat($c, ' ', 'metadata_', $c), ', ')"/>
+                                                                    <!-- Columns corresponding to elements in the XML data -->
+                                                                    <xsl:for-each select="1 to count($paths-ids) div 2">
+                                                                        <xsl:variable name="i" select="position()"/>
+                                                                        , extractValue(xml, '/*/<xsl:value-of select="$paths-ids[$i * 2 - 1]"/>')
+                                                                        "<xsl:value-of select="$paths-ids[$i * 2]"/>"
+                                                                    </xsl:for-each>
+                                                                from (
+                                                                    select d.*, dense_rank() over (partition by document_id order by last_modified desc) as latest
+                                                                    from orbeon_form_data d
+                                                                    where
+                                                                        <!-- NOTE: Generate app/form name in SQL, as Oracle doesn't allow bind variables for data definition operations -->
+                                                                        app = '<xsl:value-of select="f:escape-sql(/request/app)"/>'
+                                                                        and form = '<xsl:value-of select="f:escape-sql(/request/form)"/>'
+                                                                    )
+                                                                where latest = 1 and deleted = 'N'
                                                             </sql:update>
                                                         </sql:execute>
                                                     </sql:connection>
@@ -444,16 +473,11 @@
                                         </xsl:template>
                                     </xsl:stylesheet>
                                 </p:input>
-                                <p:output name="drop-sql" id="drop-sql"/>
-                                <p:output name="create-sql" id="create-sql"/>
+                                <p:output name="data" id="create-sql"/>
                             </p:processor>
                             <p:processor name="oxf:sql">
                                 <p:input name="data"><dummy/></p:input>
-                                <p:input name="config" href="#drop-sql"/>
-                            </p:processor>
-                            <p:processor name="oxf:sql">
-                                <p:input name="data"><dummy/></p:input>
-                                <p:input name="config" href="#create-sql"/>
+                                <p:input name="config" href="#create-sql" debug="create-sql"/>
                             </p:processor>
                         </p:when>
                     </p:choose>

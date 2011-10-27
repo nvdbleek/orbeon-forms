@@ -419,6 +419,10 @@
         <class name="org.orbeon.oxf.processor.converter.XHTMLRewrite"/>
     </processor>
 
+    <processor name="oxf:xhtml-servlet-rewrite">
+        <class name="org.orbeon.oxf.processor.converter.XHTMLServletRewrite"/>
+    </processor>
+
     <processor name="oxf:html-rewrite">
         <class name="org.orbeon.oxf.processor.converter.HTMLRewrite"/>
     </processor>
@@ -591,6 +595,10 @@
         <instantiation name="oxf:pipeline">
             <input name="config" href="oxf:/ops/utils/word-template/word-template.xpl"/>
         </instantiation>
+    </processor>
+
+    <processor name="oxf:cache">
+        <class name="org.orbeon.oxf.processor.CacheProcessor"/>
     </processor>
 
     <!-- Temporary hack to get rid of the config input -->

@@ -1382,7 +1382,9 @@ var DEFAULT_LOADING_TEXT = "Loading...";
              * @return {void}
              */
             click: function(id) {
-                OD.getElementByTagName(OD.get(id), "button").click();
+                var element = OD.get(id);
+                var button = element.tagName.toLowerCase() == "button" ? element : OD.getElementByTagName(element, "button");
+                button.click();
             },
 
             /**
@@ -1834,6 +1836,7 @@ ORBEON.xforms.Controls = {
      * @param attribute4        Optional
      */
     setCurrentValue: function(control, newControlValue, attribute1, attribute2, attribute3, attribute4) {
+        ORBEON.xforms.Events.beforeValueChange.fire({ target: control });
         var isStaticReadonly = YAHOO.util.Dom.hasClass(control, "xforms-static");
         var formElement = ORBEON.xforms.Controls.getForm(control);
         if (YAHOO.util.Dom.hasClass(control, "xforms-output-appearance-xxforms-download")) {
@@ -2029,6 +2032,8 @@ ORBEON.xforms.Controls = {
             control.value = newControlValue;
             control.previousValue = newControlValue;
         }
+
+        ORBEON.xforms.Events.afterValueChange.fire({ target: control });
     },
 
     _setRadioCheckboxClasses: function(target) {
@@ -3426,22 +3431,24 @@ ORBEON.xforms.Events = {
                 }
                 currentParent = currentParent.parentNode;
             }
-            positions = positions.reverse();
 
-            // Find value for this item
-            var currentChildren = ORBEON.xforms.Globals.menuItemsets[target.id];
-            var nodeInfo = null;
-            for (var positionIndex = 0; positionIndex < positions.length; positionIndex++) {
-                var position = positions[positionIndex];
-                nodeInfo = currentChildren[position];
-                currentChildren = nodeInfo.children;
+            // We might have clicked in the menu area, but not on a menu item
+            if (positions.length != 0) {
+                positions = positions.reverse();
+
+                // Find value for this item
+                var currentChildren = ORBEON.xforms.Globals.menuItemsets[target.id];
+                var nodeInfo = null;
+                for (var positionIndex = 0; positionIndex < positions.length; positionIndex++) {
+                    var position = positions[positionIndex];
+                    nodeInfo = currentChildren[position];
+                    currentChildren = nodeInfo.children;
+                }
+
+                // Send value change to server
+                var event = new ORBEON.xforms.server.AjaxServer.Event(null, target.id, null, nodeInfo.value, "xxforms-value-change-with-focus-change");
+                ORBEON.xforms.server.AjaxServer.fireEvents([event], false);
             }
-
-            // Send value change to server
-            var event = new ORBEON.xforms.server.AjaxServer.Event(null, target.id, null, nodeInfo.value, "xxforms-value-change-with-focus-change");
-            ORBEON.xforms.server.AjaxServer.fireEvents([event], false);
-            // Close the menu
-            ORBEON.xforms.Globals.menuYui[target.id].clearActiveItem();
         } else if (target != null && YAHOO.util.Dom.hasClass(target, "xforms-help-image")) {
             // Help image
 
@@ -3591,7 +3598,9 @@ ORBEON.xforms.Events = {
         var maxHeight =
             YAHOO.util.Dom.getViewportHeight()
             - (yuiDialog.element.clientHeight - yuiDialog.body.clientHeight)
-            - 40;
+            // Don't use the whole height of the viewport, leaving some space at the top of the page,
+            // which could be used by a navigation bar, as in Liferay
+            - 80;
 
         yuiDialog.body.style.maxHeight = maxHeight + "px";
     },
@@ -3822,7 +3831,9 @@ ORBEON.xforms.Events = {
     ajaxResponseProcessedEvent: new YAHOO.util.CustomEvent("ajaxResponseProcessed"),
     clickEvent: new YAHOO.util.CustomEvent("clickEvent"),
     errorEvent: new YAHOO.util.CustomEvent("errorEvent"),
-    yuiCalendarCreated: new YAHOO.util.CustomEvent("yuiCalendarCreated")
+    yuiCalendarCreated: new YAHOO.util.CustomEvent("yuiCalendarCreated"),
+    beforeValueChange: new YAHOO.util.CustomEvent("beforeValueChanged"),
+    afterValueChange: new YAHOO.util.CustomEvent("afterValueChanged")
 };
 
 (function() {
@@ -4096,8 +4107,8 @@ ORBEON.xforms.Init = {
              * just registering the event handler on the window object.
              */
             ns: {},                              // Namespace of ids (for portlets)
-            resourcesBaseURL: {},                // Base URL for resources e.g. /context[/version]
             xformsServerURL: {},                 // XForms Server URL
+            calendarImageURL: {},                // calendar.png image URL (should be ideally handled by a template)
             eventQueue: [],                      // Events to be sent to the server
             eventsFirstEventTime: 0,             // Time when the first event in the queue was added
             discardableTimerIds: {},             // Maps form id to array of discardable events (which are used by the server as a form of polling)
@@ -4135,7 +4146,7 @@ ORBEON.xforms.Init = {
             treeYui: {},                         // Maps tree id to the YUI object for that tree
             sliderYui: {},                       // Maps slider id to the YUI object for that slider
             isReloading: false,                  // Whether the form is being reloaded from the server
-            lastDialogZIndex: 5,                 // zIndex of the last dialog displayed. Gets incremented so the last dialog is always on top of everything else
+            lastDialogZIndex: 100,               // zIndex of the last dialog displayed. Gets incremented so the last dialog is always on top of everything else
             // Data relative to a form is stored in an array indexed by form id.
             formErrorPanel: {},                  // YUI panel used to report errors
             formHelpPanel: {},                   // Help dialog: YUI panel
@@ -4532,10 +4543,8 @@ ORBEON.xforms.Init = {
     },
 
     _setBasePaths: function(formID, scripts, versioned) {
-        // NOTE: The server provides us with a base URL, but we must use a client-side value to support proxying
-
-        var resourcesBaseURL = null;
         var xformsServerURL = null;
+        var calendarImageURL = null;
 
         if (!(window.orbeonInitData === undefined)) {
             // NOTE: We switched back and forth between trusting the client or the server on this. Starting 2010-08-27
@@ -4545,13 +4554,14 @@ ORBEON.xforms.Init = {
             // server values it is.
             var formInitData = window.orbeonInitData[formID];
             if (formInitData && formInitData["paths"]) {
-                resourcesBaseURL = formInitData["paths"]["resources-base"];
                 xformsServerURL = formInitData["paths"]["xforms-server"];
+                calendarImageURL = formInitData["paths"]["calendar-image"];
             }
         }
 
-        ORBEON.xforms.Globals.resourcesBaseURL[formID] = resourcesBaseURL;
+
         ORBEON.xforms.Globals.xformsServerURL[formID] = xformsServerURL;
+        ORBEON.xforms.Globals.calendarImageURL[formID] = calendarImageURL;
     },
 
     _widetextArea: function(textarea) {
@@ -4631,6 +4641,14 @@ ORBEON.xforms.Init = {
         });
         yuiMenu.render();
         ORBEON.xforms.Globals.menuYui[menu.id] = yuiMenu;
+
+        // For iOS, on touch outside of the menu, close it
+        // NOTE: This unfortunately also closes the menu on scroll, zoom, and other gestures. http://goo.gl/V3CEZ
+        YAHOO.util.Event.addListener(document.body, "touchstart", function(event) {
+            var target = YAHOO.util.Event.getTarget(event);
+            var menu = YAHOO.util.Dom.getAncestorByClassName(target, "xforms-select1-appearance-xxforms-menu");
+            if (menu == null) yuiMenu.clearActiveItem();
+        });
     },
 
     /**

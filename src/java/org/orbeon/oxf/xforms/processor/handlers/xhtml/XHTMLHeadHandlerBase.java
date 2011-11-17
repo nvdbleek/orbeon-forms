@@ -52,7 +52,7 @@ public abstract class XHTMLHeadHandlerBase extends XFormsBaseHandlerXHTML {
         // Register control handlers on controller
         {
             final ElementHandlerController controller = handlerContext.getController();
-            controller.registerHandler(XXFormsTextHandler.class.getName(), XFormsConstants.XXFORMS_NAMESPACE_URI, "text");
+            controller.registerHandler(XXFormsTextHandler.class.getName(), XFormsConstants.XXFORMS_NAMESPACE_URI, "text", XHTMLBodyHandler.ANY_MATCHER);
         }
 
         // Declare xmlns:f
@@ -71,7 +71,7 @@ public abstract class XHTMLHeadHandlerBase extends XFormsBaseHandlerXHTML {
         // Include static XForms CSS. This makes sure that
         final String requestPath = handlerContext.getExternalContext().getRequest().getRequestPath();
         helper.element("", XMLConstants.XINCLUDE_URI, "include", new String[] {
-                "href", XHTMLBodyHandler.getIncludedResourcePath(requestPath, "static-xforms-css.xml"),
+                "href", XHTMLBodyHandler.getIncludedResourceURL(requestPath, "static-xforms-css.xml"),
                 "fixup-xml-base", "false"
         });
 
@@ -109,44 +109,8 @@ public abstract class XHTMLHeadHandlerBase extends XFormsBaseHandlerXHTML {
             // Store information about "special" controls that need JavaScript initialization
             // Gather information about appearances of controls which use Script
             // Map<String controlName, Map<String appearanceOrMediatype, List<String effectiveId>>>
-            final Map<String, Map<String, List<String>>> javaScriptControlsAppearancesMap = gatherJavascriptControls();
-            outputJavaScriptInitialData(helper, xhtmlPrefix, javaScriptControlsAppearancesMap);
+            outputJavaScriptInitialData(helper, xhtmlPrefix, XHTMLHeadHandler.gatherJavascriptControls(containingDocument));
         }
-    }
-
-    private Map<String, Map<String, List<String>>> gatherJavascriptControls() {
-        final Map<String, Map<String, List<String>>> javaScriptControlsAppearancesMap = new HashMap<String, Map<String, List<String>>>();
-        final XFormsControls xformsControls = containingDocument.getControls();
-        xformsControls.visitAllControls(new XFormsControls.XFormsControlVisitorAdapter() {
-            public boolean startVisitControl(XFormsControl control) {
-                final String controlName = control.getName();
-
-                // Don't run JavaScript initialization if the control is static readonly (could change in the
-                // future if some static readonly controls require JS initialization)
-                final boolean hasJavaScriptInitialization = control.hasJavaScriptInitialization() && !control.isStaticReadonly();
-                if (hasJavaScriptInitialization) {
-                    Map<String, List<String>> listForControlNameMap = javaScriptControlsAppearancesMap.get(controlName);
-                    if (listForControlNameMap == null) {
-                        listForControlNameMap = new HashMap<String, List<String>>();
-                        javaScriptControlsAppearancesMap.put(control.getName(), listForControlNameMap);
-                    }
-                    final String controlAppearanceOrMediatype;
-                    {
-                        final String controlAppearance = control.getAppearance();
-                        controlAppearanceOrMediatype = (controlAppearance != null) ? controlAppearance : control.getMediatype();
-                    }
-
-                    List<String> idsForAppearanceOrMediatypeList = listForControlNameMap.get(controlAppearanceOrMediatype);
-                    if (idsForAppearanceOrMediatypeList == null) {
-                        idsForAppearanceOrMediatypeList = new ArrayList<String>();
-                        listForControlNameMap.put(controlAppearanceOrMediatype, idsForAppearanceOrMediatypeList);
-                    }
-                    idsForAppearanceOrMediatypeList.add(XFormsUtils.namespaceId(containingDocument, control.getEffectiveId()));
-                }
-                return true;
-            }
-        });
-        return javaScriptControlsAppearancesMap;
     }
 
     protected abstract void outputCSSResources(ContentHandlerHelper helper, String xhtmlPrefix,

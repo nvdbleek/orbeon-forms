@@ -19,8 +19,12 @@ import org.orbeon.oxf.xforms.XFormsConstants;
 import org.orbeon.oxf.xforms.analysis.controls.LHHAAnalysis;
 import org.orbeon.oxf.xforms.control.XFormsControl;
 import org.orbeon.oxf.xforms.processor.handlers.XFormsControlLifecycleHandlerDelegate;
-import org.orbeon.oxf.xml.*;
-import org.xml.sax.*;
+import org.orbeon.oxf.xml.ContentHandlerHelper;
+import org.orbeon.oxf.xml.XMLConstants;
+import org.orbeon.oxf.xml.XMLUtils;
+import org.xml.sax.Attributes;
+import org.xml.sax.ContentHandler;
+import org.xml.sax.SAXException;
 import org.xml.sax.helpers.AttributesImpl;
 
 /**
@@ -86,8 +90,8 @@ public abstract class XFormsControlLifecyleHandler extends XFormsBaseHandlerXHTM
 	
 
 	@Override
-    public void init(String uri, String localname, String qName, Attributes attributes) throws SAXException {
-
+    public void init(String uri, String localname, String qName, Attributes attributes, Object matched) throws SAXException {
+        super.init(uri, localname, qName, attributes, matched);
         xFormsControlLifecycleHandlerDelegate = new XFormsControlLifecycleHandlerDelegate(handlerContext, containingDocument, attributes);
     }
 
@@ -295,7 +299,7 @@ public abstract class XFormsControlLifecyleHandler extends XFormsBaseHandlerXHTM
         final StringBuilder classes;
         {
             // Initial classes: xforms-control, xforms-[control name], incremental, appearance, mediatype, xforms-static
-            classes = getInitialClasses(uri, localname, attributes, xformsControl, getAppearance(attributes), isDefaultIncremental());
+            classes = getInitialClasses(uri, localname, attributes, xformsControl, isDefaultIncremental());
             // All MIP-related classes
             handleMIPClasses(classes, prefixedId, xformsControl);
             // Static classes

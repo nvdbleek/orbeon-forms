@@ -26,6 +26,7 @@ import org.orbeon.oxf.util.XPathCache;
 import org.orbeon.oxf.xforms.*;
 import org.orbeon.oxf.xforms.analysis.ElementAnalysis;
 import org.orbeon.oxf.xforms.analysis.XPathDependencies;
+import org.orbeon.oxf.xforms.analysis.controls.AppearanceTrait;
 import org.orbeon.oxf.xforms.analysis.controls.LHHAAnalysis;
 import org.orbeon.oxf.xforms.control.controls.XFormsRepeatControl;
 import org.orbeon.oxf.xforms.control.controls.XFormsRepeatIterationControl;
@@ -33,6 +34,7 @@ import org.orbeon.oxf.xforms.event.XFormsEvent;
 import org.orbeon.oxf.xforms.event.XFormsEventObserver;
 import org.orbeon.oxf.xforms.event.XFormsEventTarget;
 import org.orbeon.oxf.xforms.event.XFormsEvents;
+import org.orbeon.oxf.xforms.event.events.XXFormsBindingErrorEvent;
 import org.orbeon.oxf.xforms.function.XFormsFunction;
 import org.orbeon.oxf.xforms.xbl.XBLBindingsBase;
 import org.orbeon.oxf.xforms.xbl.XBLContainer;
@@ -48,6 +50,7 @@ import org.orbeon.saxon.om.ValueRepresentation;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.AttributesImpl;
+import scala.Tuple3;
 
 import java.util.*;
 
@@ -72,7 +75,6 @@ public abstract class XFormsControl implements XFormsEventTarget, XFormsEventObs
     private final String prefixedId;
     private final String name;
 
-    private String appearance;// could become more dynamic in the future
     private String mediatype;// could become more dynamic in the future
 
     // Semi-dynamic information (depends on the tree of controls, but does not change over time)
@@ -131,6 +133,7 @@ public abstract class XFormsControl implements XFormsEventTarget, XFormsEventObs
     }
 
     public ElementAnalysis getElementAnalysis() {
+        // TODO: Control must point to this directly
         return getXBLContainer().getPartAnalysis().getControlAnalysis(getPrefixedId());
     }
 
@@ -435,15 +438,10 @@ public abstract class XFormsControl implements XFormsEventTarget, XFormsEventObs
     }
 
     /**
-     * Return the control's appearance as an exploded QName.
+     * Return the control's appearances as a set of QNames.
      */
-    public String getAppearance() {
-        if (appearance == null) {
-            final QName qName = Dom4jUtils.extractTextValueQName(container.getNamespaceMappings(controlElement).mapping,
-                    controlElement.attributeValue(XFormsConstants.APPEARANCE_QNAME.getName()), true);
-            appearance = Dom4jUtils.qNameToExplodedQName(qName);
-        }
-        return appearance;
+    public Set<QName> getAppearances() {
+        return getAppearances(getElementAnalysis());
     }
 
     /**
@@ -455,11 +453,14 @@ public abstract class XFormsControl implements XFormsEventTarget, XFormsEventObs
         return mediatype;
     }
 
-    /**
-     * Return true if the control, with its current appearance, requires JavaScript initialization.
-     */
-    public boolean hasJavaScriptInitialization() {
-        return false;
+    public Tuple3<String, String, String> getJavaScriptInitialization() {
+        return null;
+    }
+    
+    protected Tuple3<String, String, String> getCommonJavaScriptInitialization() {
+        final Set<QName> appearances = getAppearances();
+        final String appearance = (appearances.size() > 0) ? Dom4jUtils.qNameToExplodedQName(appearances.iterator().next()) : null;
+        return new Tuple3<String, String, String>(getName(), appearance != null ? appearance : getMediatype(), getEffectiveId());
     }
 
     /**
@@ -646,6 +647,9 @@ public abstract class XFormsControl implements XFormsEventTarget, XFormsEventObs
             }
         } else if (XFormsEvents.XFORMS_HELP.equals(event.getName())) {
             containingDocument.setClientHelpEffectiveControlId(getEffectiveId());
+        } else if (XFormsEvents.XXFORMS_BINDING_ERROR.equals(event.getName())) {
+            final XXFormsBindingErrorEvent ev = (XXFormsBindingErrorEvent) event;
+            XFormsError.handleNonFatalSetvalueError(containingDocument, ev.locationData(), ev.reason());
         }
     }
 
@@ -658,7 +662,7 @@ public abstract class XFormsControl implements XFormsEventTarget, XFormsEventObs
     }
 
     /**
-     * Rewrite an HTML value which may contain URLs, for example in @src or @href attributes.
+     * Rewrite an HTML value which may contain URLs, for example in @src or @href attributes. Also deals with closing element tags.
      *
      *
      * @param rawValue          value to rewrite
@@ -669,58 +673,48 @@ public abstract class XFormsControl implements XFormsEventTarget, XFormsEventObs
         if (rawValue == null)
             return null;
 
-        // Quick check for the most common attributes, src and href. Ideally we should check more.
-        final boolean needsRewrite = rawValue.indexOf("src=") != -1 || rawValue.indexOf("href=") != -1;
-        final String result;
-        if (needsRewrite) {
-            // Rewrite URLs
-            final StringBuilder sb = new StringBuilder(rawValue.length() * 2);// just an approx of the size it may take
-            // NOTE: we do our own serialization here, but it's really simple (no namespaces) and probably reasonably efficient
-            final ExternalContext.Rewriter rewriter = NetUtils.getExternalContext().getResponse();
-            XFormsUtils.streamHTMLFragment(new XHTMLRewrite().getRewriteXMLReceiver(rewriter, new ForwardingXMLReceiver() {
+        final StringBuilder sb = new StringBuilder(rawValue.length() * 2);// just an approx of the size it may take
+        // NOTE: we do our own serialization here, but it's really simple (no namespaces) and probably reasonably efficient
+        final ExternalContext.Rewriter rewriter = NetUtils.getExternalContext().getResponse();
+        XFormsUtils.streamHTMLFragment(new XHTMLRewrite().getRewriteXMLReceiver(rewriter, new ForwardingXMLReceiver() {
+            
+            private boolean isStartElement;
 
-                private boolean isStartElement;
+            public void characters(char[] chars, int start, int length) throws SAXException {
+                sb.append(XMLUtils.escapeXMLMinimal(new String(chars, start, length)));// NOTE: not efficient to create a new String here
+                isStartElement = false;
+            }
 
-                public void characters(char[] chars, int start, int length) throws SAXException {
-                    sb.append(XMLUtils.escapeXMLMinimal(new String(chars, start, length)));// NOTE: not efficient to create a new String here
-                    isStartElement = false;
+            public void startElement(String uri, String localname, String qName, Attributes attributes) throws SAXException {
+                sb.append('<');
+                sb.append(localname);
+                final int attributeCount = attributes.getLength();
+                for (int i = 0; i < attributeCount; i++) {
+
+                    final String currentName = attributes.getLocalName(i);
+                    final String currentValue = attributes.getValue(i);
+
+                    sb.append(' ');
+                    sb.append(currentName);
+                    sb.append("=\"");
+                    sb.append(currentValue);
+                    sb.append('"');
                 }
+                sb.append('>');
+                isStartElement = true;
+            }
 
-                public void startElement(String uri, String localname, String qName, Attributes attributes) throws SAXException {
-                    sb.append('<');
+            public void endElement(String uri, String localname, String qName) throws SAXException {
+                if (!isStartElement || !XFormsUtils.isVoidElement(localname)) {
+                    // We serialize to HTML: don't close elements that just opened (will cover <br>, <hr>, etc.). Be sure not to drop closing elements of other tags though!
+                    sb.append("</");
                     sb.append(localname);
-                    final int attributeCount = attributes.getLength();
-                    for (int i = 0; i < attributeCount; i++) {
-
-                        final String currentName = attributes.getLocalName(i);
-                        final String currentValue = attributes.getValue(i);
-
-                        sb.append(' ');
-                        sb.append(currentName);
-                        sb.append("=\"");
-                        sb.append(currentValue);
-                        sb.append('"');
-                    }
                     sb.append('>');
-                    isStartElement = true;
                 }
-
-                public void endElement(String uri, String localname, String qName) throws SAXException {
-                    if (!isStartElement) {
-                        // We serialize to HTML: don't close elements that just opened (will cover <br>, <hr>, etc.)
-                        sb.append("</");
-                        sb.append(localname);
-                        sb.append('>');
-                    }
-                    isStartElement = false;
-                }
-            }, true), rawValue, locationData, "xhtml");
-            result = sb.toString();
-        } else {
-            // No rewriting needed
-            result = rawValue;
-        }
-        return result;
+                isStartElement = false;
+            }
+        }, true), rawValue, locationData, "xhtml");
+        return sb.toString();
     }
 
     /**
@@ -756,10 +750,7 @@ public abstract class XFormsControl implements XFormsEventTarget, XFormsEventObs
                         bindingContext.getInScopeVariables(), XFormsContainingDocument.getFunctionLibrary(), getFunctionContext(), null, getLocationData());
                 } catch (Exception e) {
                     // Don't consider this as fatal
-                    // TODO: must dispatch xforms-compute-error? Check if safe to do so.
-                    final IndentedLogger indentedLogger = containingDocument.getControls().getIndentedLogger();
-                    indentedLogger.logWarning("", "exception while evaluating XPath expression", e);
-
+                    XFormsError.handleNonFatalXPathError(containingDocument, e);
                     return null;
                 } finally {
                     // Restore function context to prevent leaks caused by context pointing to removed controls
@@ -794,10 +785,7 @@ public abstract class XFormsControl implements XFormsEventTarget, XFormsEventObs
                                     getFunctionContext(), null, getLocationData());
             } catch (Exception e) {
                 // Don't consider this as fatal
-                // TODO: must dispatch xforms-compute-error? Check if safe to do so.
-                final IndentedLogger indentedLogger = containingDocument.getControls().getIndentedLogger();
-                indentedLogger.logWarning("", "exception while evaluating XPath expression", e);
-
+                XFormsError.handleNonFatalXPathError(containingDocument, e);
                 return null;
             } finally {
                 // Restore function context to prevent leaks caused by context pointing to removed controls
@@ -835,10 +823,7 @@ public abstract class XFormsControl implements XFormsEventTarget, XFormsEventObs
                                 getFunctionContext(), null, getLocationData());
             } catch (Exception e) {
                 // Don't consider this as fatal
-                // TODO: must dispatch xforms-compute-error? Check if safe to do so.
-                final IndentedLogger indentedLogger = containingDocument.getControls().getIndentedLogger();
-                indentedLogger.logWarning("", "exception while evaluating XPath expression", e);
-
+                XFormsError.handleNonFatalXPathError(containingDocument, e);
                 return null;
             } finally {
                 // Restore function context to prevent leaks caused by context pointing to removed controls
@@ -1602,5 +1587,13 @@ public abstract class XFormsControl implements XFormsEventTarget, XFormsEventObs
 
     public List<org.orbeon.oxf.xforms.event.EventListener> getListeners(String eventName) {
         return null;
+    }
+
+    public static Set<QName> getAppearances(ElementAnalysis elementAnalysis) {
+        if (elementAnalysis instanceof AppearanceTrait) {
+            return ((AppearanceTrait) elementAnalysis).jAppearances();
+        } else {
+            return Collections.emptySet();
+        }
     }
 }

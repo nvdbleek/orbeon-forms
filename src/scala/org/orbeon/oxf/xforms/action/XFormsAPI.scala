@@ -13,7 +13,7 @@
  */
 package org.orbeon.oxf.xforms.action
 
-import actions.{XFormsSetindexAction, XFormsDeleteAction, XFormsInsertAction, XFormsSetvalueAction}
+import actions.{XFormsSetindexAction, XFormsDeleteAction, XFormsInsertAction}
 import collection.JavaConverters._
 import org.orbeon.saxon.om._
 import java.util.{List => JList}
@@ -24,6 +24,7 @@ import org.orbeon.oxf.xforms.xbl.XBLContainer
 import org.orbeon.oxf.xforms.event.{XFormsEventObserver, XFormsEvent}
 import org.dom4j.{Element, QName}
 import org.orbeon.oxf.util.DynamicVariable
+import org.orbeon.oxf.xforms.model.DataModel
 
 object XFormsAPI {
 
@@ -47,10 +48,19 @@ object XFormsAPI {
     // @return the node whose value was set, if any
     def setvalue(ref: Seq[NodeInfo], value: String) = {
         if (ref nonEmpty) {
-            val action = actionContext.value
-            XFormsSetvalueAction.doSetValue(action map(_.getContainingDocument) orNull, action map (_.getIndentedLogger) orNull,
-                null /* TODO */, ref.head, value, null, "scala setvalue", false)
-            Some(ref.head)
+            val nodeInfo = ref.head
+
+            def onSuccess(oldValue: String): Unit =
+                for {
+                    action <- actionContext.value
+                    containingDocument = action.getContainingDocument
+                    indentedLogger = action.getIndentedLogger
+                } yield
+                    DataModel.logAndNotifyValueChange(containingDocument, indentedLogger, "scala setvalue", nodeInfo, oldValue, value, false)
+
+            DataModel.setValueIfChanged(nodeInfo, value, onSuccess)
+
+            Some(nodeInfo)
         } else
             None
     }

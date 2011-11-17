@@ -22,10 +22,7 @@ import org.orbeon.oxf.common.ValidationException;
 import org.orbeon.oxf.util.XPathCache;
 import org.orbeon.oxf.xforms.action.XFormsActions;
 import org.orbeon.oxf.xforms.analysis.*;
-import org.orbeon.oxf.xforms.analysis.controls.AttributeControl;
-import org.orbeon.oxf.xforms.analysis.controls.ExternalLHHAAnalysis;
-import org.orbeon.oxf.xforms.analysis.controls.LHHAAnalysis;
-import org.orbeon.oxf.xforms.analysis.controls.RootControl;
+import org.orbeon.oxf.xforms.analysis.controls.*;
 import org.orbeon.oxf.xforms.analysis.model.Instance;
 import org.orbeon.oxf.xforms.analysis.model.Model;
 import org.orbeon.oxf.xforms.control.XFormsControlFactory;
@@ -83,6 +80,12 @@ public abstract class PartAnalysisBase implements PartAnalysis {
 
     // XXFormsAttributeControl
     private Map<String, Map<String, AttributeControl>> attributeControls;        // Map<String forPrefixedId, Map<String name, AttributeControl control>>
+
+    private boolean _hasInputPlaceholder = false;
+
+    public boolean hasInputPlaceholder() {
+        return _hasInputPlaceholder;
+    }
 
     public PartAnalysisBase(Metadata metadata, XBLBindingsBase.Scope startScope) {
         this.metadata = metadata;
@@ -350,6 +353,33 @@ public abstract class PartAnalysisBase implements PartAnalysis {
         // Process deferred external LHHA elements
         for (final ExternalLHHAAnalysis entry : externalLHHA)
             entry.attachToControl();
+
+        // Check whether input controls have "placeholder" label/hint
+        if (controlTypes.get("input") != null) {
+            final Collection<ElementAnalysis> values = controlTypes.get("input").values();
+            if (values != null && values.size() > 0) {
+                for (final ElementAnalysis control : values) {
+                    if (control instanceof LHHATrait) {
+                        final LHHATrait lhhaTrait = (LHHATrait) control;
+
+                        {
+                            final LHHAAnalysis lhhaAnalysis = lhhaTrait.getLHHA("label");
+                            if (lhhaAnalysis != null && lhhaAnalysis.jAppearances().contains(XFormsConstants.XXFORMS_PLACEHOLDER_APPEARANCE_QNAME)) {
+                                _hasInputPlaceholder = true;
+                                break;
+                            }
+                        }
+                        {
+                            final LHHAAnalysis lhhaAnalysis = lhhaTrait.getLHHA("hint");
+                            if (lhhaAnalysis != null && lhhaAnalysis.jAppearances().contains(XFormsConstants.XXFORMS_PLACEHOLDER_APPEARANCE_QNAME)) {
+                                _hasInputPlaceholder = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // Index attribute controls
         if (controlTypes.get("attribute") != null) {
@@ -787,13 +817,17 @@ public abstract class PartAnalysisBase implements PartAnalysis {
                         appearances = new HashSet<QName>();
                         controlAppearances.put(controlName, appearances);
                     }
-                    final QName appearance = Dom4jUtils.extractAttributeValueQName(elementAnalysis.element(), XFormsConstants.APPEARANCE_QNAME);
-                    if ("textarea".equals(controlName) && "text/html".equals(elementAnalysis.element().attributeValue(XFormsConstants.MEDIATYPE_QNAME))) {
-                        // Special appearance: when text/html mediatype is found on <textarea>, do as if an xxforms:richtext
-                        // appearance had been set, so that we can decide on feature usage based on appearance only.
-                        appearances.add(XFormsConstants.XXFORMS_RICH_TEXT_APPEARANCE_QNAME);
-                    } else if (appearance != null) {
-                        appearances.add(appearance);
+                    if (elementAnalysis instanceof AppearanceTrait) {
+                        // Control has appearances
+                        final Set<QName> controlAppearances = ((AppearanceTrait) elementAnalysis).jAppearances();
+
+                        if ("textarea".equals(controlName) && "text/html".equals(elementAnalysis.element().attributeValue(XFormsConstants.MEDIATYPE_QNAME))) {
+                            // Special appearance: when text/html mediatype is found on <textarea>, do as if an xxforms:richtext
+                            // appearance had been set, so that we can decide on feature usage based on appearance only.
+                            appearances.add(XFormsConstants.XXFORMS_RICH_TEXT_APPEARANCE_QNAME);
+                        }
+
+                        appearances.addAll(controlAppearances);
                     }
                 }
 

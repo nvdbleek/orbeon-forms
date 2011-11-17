@@ -25,6 +25,7 @@ import org.orbeon.oxf.xforms.event.events.XXFormsDialogOpenEvent;
 import org.orbeon.oxf.xforms.xbl.XBLContainer;
 import org.orbeon.oxf.xml.ContentHandlerHelper;
 import org.xml.sax.helpers.AttributesImpl;
+import scala.Tuple3;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -69,7 +70,7 @@ public class XXFormsDialogControl extends XFormsNoSingleNodeContainerControl {
         this.level = element.attributeValue("level");
         if (this.level == null) {
             // Default is "modeless" for "minimal" appearance, "modal" otherwise
-            this.level = XFormsConstants.XFORMS_MINIMAL_APPEARANCE_QNAME.getName().equals(getAppearance()) ? "modeless" : "modal";
+            this.level = getAppearances().contains(XFormsConstants.XFORMS_MINIMAL_APPEARANCE_QNAME) ? "modeless" : "modal";
         }
         this.close = !"false".equals(element.attributeValue("close"));
         this.draggable = !"false".equals(element.attributeValue("draggable"));
@@ -106,8 +107,8 @@ public class XXFormsDialogControl extends XFormsNoSingleNodeContainerControl {
     }
 
     @Override
-    public boolean hasJavaScriptInitialization() {
-        return true;
+    public Tuple3<String, String, String> getJavaScriptInitialization() {
+        return getCommonJavaScriptInitialization();
     }
 
     public String getLevel() {

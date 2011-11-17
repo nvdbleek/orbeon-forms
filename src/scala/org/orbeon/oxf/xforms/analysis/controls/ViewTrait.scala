@@ -18,7 +18,7 @@ import org.orbeon.oxf.xforms.analysis.SimpleElementAnalysis
 /**
  * Handle aspects of an element that are specific to the view.
  */
-trait ViewTrait extends SimpleElementAnalysis {
+trait ViewTrait extends SimpleElementAnalysis with AppearanceTrait {
 
     // Index of the element in the view
     val index: Int = staticStateContext.index

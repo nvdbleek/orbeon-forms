@@ -111,7 +111,7 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
     private static FunctionLibrary functionLibrary = XFormsFunctionLibrary.instance();
 
     // Whether this document is currently being initialized
-    private boolean isInitializing;
+    private boolean initializing;
 
     // Transient URI resolver for initialization
     private XFormsURIResolver uriResolver;
@@ -152,6 +152,7 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
     private String focusEffectiveControlId;
     private String helpEffectiveControlId;
     private List<DelayedEvent> delayedEvents;
+    private List<XFormsError.ServerError> serverErrors;
 
     // Annotated page template for noscript and full updates mode
     // NOTE: We used to keep this in the static state, but the static state must now not depend on external HTML anymore
@@ -211,7 +212,7 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
             // Remember parameters used during initialization
             this.uriResolver = uriResolver;
             this.response = response;
-            this.isInitializing = true;
+            this.initializing = true;
 
             // Initialize the containing document
             try {
@@ -338,7 +339,7 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
     }
 
     public boolean isInitializing() {
-        return isInitializing;
+        return initializing;
     }
 
     /**
@@ -348,7 +349,7 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
      * @return  true iif the document must handle differences
      */
     public boolean isHandleDifferences() {
-        return !isInitializing;
+        return !initializing;
     }
 
     /**
@@ -485,7 +486,7 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
      */
     private void clearClientState() {
 
-        assert !isInitializing;
+        assert !initializing;
         assert response == null;
         assert uriResolver == null;
 
@@ -500,6 +501,8 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
         this.focusEffectiveControlId = null;
         this.helpEffectiveControlId = null;
         this.delayedEvents = null;
+        
+        this.serverErrors = null;
     }
 
     /**
@@ -859,6 +862,21 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
             return null;
         }
     }
+    
+    public void addServerError(XFormsError.ServerError serverError) {
+        final int maxErrors = XFormsProperties.getShowMaxRecoverableErrors(this);
+        if (maxErrors > 0) {
+            if (serverErrors == null)
+                serverErrors = new ArrayList<XFormsError.ServerError>();
+
+            if (serverErrors.size() < maxErrors)
+                serverErrors.add(serverError);
+        }
+    }
+    
+    public List<XFormsError.ServerError> getServerErrors() {
+        return serverErrors != null ? serverErrors : Collections.<XFormsError.ServerError>emptyList();
+    }
 
     @Override
     public Object resolveObjectById(String sourceEffectiveId, String targetStaticId, Item contextItem) {
@@ -905,7 +923,7 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
 
         this.uriResolver = null;        // URI resolver is of no use after initialization and it may keep dangerous references (PipelineContext)
         this.response = null;           // same as above
-        this.isInitializing = false;
+        this.initializing = false;
 
         clearClientState(); // client state can contain e.g. focus information, etc. set during initialization
 
@@ -998,9 +1016,9 @@ public class XFormsContainingDocument extends XBLContainer implements XFormsDocu
             // Poll event for submissions
             // NOP, as we check for async submission in the client event loop
         } else if (XFormsEvents.XXFORMS_ACTION_ERROR.equals(eventName)) {
-            // Log error
+            // Handle action error
             final XXFormsActionErrorEvent ev = (XXFormsActionErrorEvent) event;
-            getIndentedLogger(XFormsActions.LOGGING_CATEGORY()).logError("action", "exception while running action", ev.toStringArray());
+            XFormsError.handleNonFatalXFormsError(getContainingDocument(), "exception while running action", ev.throwable());
         } else {
             super.performDefaultAction(event);
         }

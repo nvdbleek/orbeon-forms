@@ -281,6 +281,8 @@ public class XFormsConstants {
     public static final QName XFORMS_MINIMAL_APPEARANCE_QNAME = new QName("minimal");
     public static final QName XXFORMS_MINIMAL_APPEARANCE_QNAME = new QName("minimal", XXFORMS_NAMESPACE);
 
+    public static final QName XXFORMS_MODAL_QNAME = new QName("modal", XXFORMS_NAMESPACE);
+
     public static final QName XFORMS_MODAL_LEVEL_QNAME = new QName("modal");
     public static final QName XFORMS_MODELESS_LEVEL_QNAME = new QName("modeless");
     public static final QName XFORMS_EPHEMERAL_LEVEL_QNAME = new QName("ephemeral");
@@ -303,6 +305,7 @@ public class XFormsConstants {
     public static final QName XXFORMS_TEXT_APPEARANCE_QNAME = new QName("text", XXFORMS_NAMESPACE);
     public static final QName XXFORMS_DOWNLOAD_APPEARANCE_QNAME = new QName("download", XXFORMS_NAMESPACE);
     public static final QName XXFORMS_SEPARATOR_APPEARANCE_QNAME = new QName("separator", XXFORMS_NAMESPACE);
+    public static final QName XXFORMS_PLACEHOLDER_APPEARANCE_QNAME = new QName("placeholder", XXFORMS_NAMESPACE);
 
     public static final QName XXFORMS_TARGET_QNAME = new QName("target", XXFORMS_NAMESPACE);
     public static final QName XXFORMS_UPLOADS_QNAME = new QName("uploads", XXFORMS_NAMESPACE);
@@ -338,14 +341,11 @@ public class XFormsConstants {
 
     public static final QName XFORMS_INTEGER_QNAME = new QName("integer", XFORMS_NAMESPACE);
 
-    public static final String XFORMS_STRING_EXPLODED_QNAME = XMLUtils.buildExplodedQName(XFORMS_NAMESPACE_URI, "string");
-    public static final String XFORMS_BOOLEAN_EXPLODED_QNAME = XMLUtils.buildExplodedQName(XFORMS_NAMESPACE_URI, "boolean");
-    public static final String XFORMS_INTEGER_EXPLODED_QNAME = XMLUtils.buildExplodedQName(XFORMS_NAMESPACE_URI, "integer");
-    public static final String XFORMS_DATE_EXPLODED_QNAME = XMLUtils.buildExplodedQName(XFORMS_NAMESPACE_URI, "date");
-    public static final String XFORMS_DATETIME_EXPLODED_QNAME = XMLUtils.buildExplodedQName(XFORMS_NAMESPACE_URI, "dateTime");
-    public static final String XFORMS_TIME_EXPLODED_QNAME = XMLUtils.buildExplodedQName(XFORMS_NAMESPACE_URI, "time");
-    public static final String XFORMS_ANYURI_EXPLODED_QNAME = XMLUtils.buildExplodedQName(XFORMS_NAMESPACE_URI, "anyURI");
-    public static final String XFORMS_BASE64BINARY_EXPLODED_QNAME = XMLUtils.buildExplodedQName(XFORMS_NAMESPACE_URI, "base64Binary");
+    public static final QName XFORMS_STRING_QNAME = new QName("string", XFORMS_NAMESPACE);
+    public static final QName XFORMS_ANYURI_QNAME = new QName("anyURI", XFORMS_NAMESPACE);
+    public static final QName XFORMS_BASE64BINARY_QNAME = new QName("base64Binary", XFORMS_NAMESPACE);
+
+    public static final String XFORMS_STRING_EXPLODED_QNAME = XMLUtils.buildExplodedQName(XFORMS_STRING_QNAME);
 
     public static final QName XXFORMS_EVENT_MODE_QNAME = new QName("events-mode", XXFORMS_NAMESPACE);
 
@@ -356,20 +356,12 @@ public class XFormsConstants {
     // Use "$$" to minimize chances of conflict with user-defined ids
     public static final String LHHAC_SEPARATOR = "$$";
 
-    public static final String DEFAULT_UPLOAD_TYPE_EXPLODED_QNAME = XMLConstants.XS_ANYURI_EXPLODED_QNAME;
-    public static final QName DEFAULT_UPLOAD_TYPE_QNAME = XMLConstants.XS_ANYURI_QNAME;
-
     public static final String DUMMY_IMAGE_URI = "/ops/images/xforms/spacer.gif";
     public static final String HELP_IMAGE_URI = "/ops/images/xforms/help.png";
     public static final String CALENDAR_IMAGE_URI = "/ops/images/xforms/calendar.png";
 
-    public static final String XSD_EXPLODED_TYPE_PREFIX = "{" + XMLConstants.XSD_URI + "}";
-    public static final String XFORMS_EXPLODED_TYPE_PREFIX = "{" + XFORMS_NAMESPACE_URI + "}";
-
     public static final QName STATIC_STATE_SCRIPTS_QNAME = new QName("scripts");
     public static final QName STATIC_STATE_PROPERTIES_QNAME = new QName("properties");
-
-    public static final String NO_INDEX_ADJUSTMENT = XMLUtils.buildExplodedQName(XXFORMS_NAMESPACE_URI, "no-index-adjustment");
 
     private XFormsConstants() {
         // Disallow construction

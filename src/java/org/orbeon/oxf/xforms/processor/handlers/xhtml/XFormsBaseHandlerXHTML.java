@@ -17,7 +17,10 @@ import org.apache.commons.lang.StringUtils;
 import org.dom4j.QName;
 import org.orbeon.oxf.common.ValidationException;
 import org.orbeon.oxf.pipeline.api.XMLReceiver;
-import org.orbeon.oxf.xforms.*;
+import org.orbeon.oxf.xforms.StaticStateGlobalOps;
+import org.orbeon.oxf.xforms.XFormsConstants;
+import org.orbeon.oxf.xforms.XFormsUtils;
+import org.orbeon.oxf.xforms.analysis.ElementAnalysis;
 import org.orbeon.oxf.xforms.analysis.controls.LHHAAnalysis;
 import org.orbeon.oxf.xforms.control.XFormsControl;
 import org.orbeon.oxf.xforms.control.XFormsControlFactory;
@@ -25,9 +28,7 @@ import org.orbeon.oxf.xforms.control.XFormsSingleNodeControl;
 import org.orbeon.oxf.xforms.control.XFormsValueControl;
 import org.orbeon.oxf.xforms.processor.handlers.HandlerContext;
 import org.orbeon.oxf.xforms.processor.handlers.XFormsBaseHandler;
-import org.orbeon.oxf.xforms.processor.handlers.XFormsBaseHandler.LHHAC; // Keep scala compiler happy
 import org.orbeon.oxf.xml.ContentHandlerHelper;
-import org.orbeon.oxf.xml.ElementHandler;
 import org.orbeon.oxf.xml.XMLConstants;
 import org.orbeon.oxf.xml.XMLUtils;
 import org.xml.sax.Attributes;
@@ -134,12 +135,8 @@ public abstract class XFormsBaseHandlerXHTML extends XFormsBaseHandler {
         }
     }
 
-    protected StringBuilder getInitialClasses(String controlURI, String controlName, Attributes controlAttributes, XFormsControl control) {
-        return getInitialClasses(controlURI, controlName, controlAttributes, control, null, false);
-    }
-
-    protected StringBuilder getInitialClasses(String controlURI, String controlName, Attributes controlAttributes, XFormsControl control, QName appearance, boolean incrementalDefault) {
-
+    protected StringBuilder getInitialClasses(String controlURI, String controlName, Attributes controlAttributes, XFormsControl control, boolean incrementalDefault) {
+        
         final StringBuilder sb = new StringBuilder(50);
         // User-defined classes go first
         appendControlUserClasses(controlAttributes, control, sb);
@@ -168,25 +165,8 @@ public abstract class XFormsBaseHandlerXHTML extends XFormsBaseHandler {
                 sb.append("xforms-incremental");
             }
         }
-        {
-            // Class for appearance
-            if (appearance == null)
-                appearance = getAppearance(controlAttributes);
-
-            if (appearance != null) {
-                if (sb.length() > 0)
-                    sb.append(' ');
-                sb.append("xforms-");
-                sb.append(controlName);
-                sb.append("-appearance-");
-                // Allow xxforms:* and *
-                if (XFormsConstants.XXFORMS_NAMESPACE_URI.equals(appearance.getNamespace().getURI()))
-                    sb.append("xxforms-");
-                else if (!"".equals(appearance.getNamespace().getURI()))
-                    throw new ValidationException("Invalid appearance namespace URI: " + appearance.getNamespace().getURI(), handlerContext.getLocationData());
-                sb.append(appearance.getName());
-            }
-        }
+        // Classes for appearances
+        appendAppearances(elementAnalysis, sb);
         {
             // Class for mediatype
             final String mediatypeValue = controlAttributes.getValue("mediatype");
@@ -218,6 +198,22 @@ public abstract class XFormsBaseHandlerXHTML extends XFormsBaseHandler {
             sb.append(" xforms-static");
 
         return sb;
+    }
+
+    protected static void appendAppearances(ElementAnalysis elementAnalysis,StringBuilder sb) {
+        for (final QName appearance : XFormsControl.getAppearances(elementAnalysis)) {
+            if (sb.length() > 0)
+                sb.append(' ');
+            sb.append("xforms-");
+            sb.append(elementAnalysis.element().getName());
+            sb.append("-appearance-");
+            // Allow xxforms:* and *
+            if (XFormsConstants.XXFORMS_NAMESPACE_URI.equals(appearance.getNamespace().getURI()))
+                sb.append("xxforms-");
+            else if (!"".equals(appearance.getNamespace().getURI()))
+                throw new ValidationException("Invalid appearance namespace URI: " + appearance.getNamespace().getURI(), elementAnalysis.locationData());
+            sb.append(appearance.getName());
+        }
     }
 
     protected StringBuilder appendControlUserClasses(Attributes controlAttributes, XFormsControl control, StringBuilder sb) {
@@ -261,7 +257,7 @@ public abstract class XFormsBaseHandlerXHTML extends XFormsBaseHandler {
         return sb;
     }
 
-    protected void handleLabelHintHelpAlert(String controlEffectiveId, String forEffectiveId, LHHAC lhhaType, XFormsControl control, boolean isTemplate, boolean addIds) throws SAXException {
+    protected void handleLabelHintHelpAlert(String controlEffectiveId, String forEffectiveId, XFormsBaseHandler.LHHAC lhhaType, XFormsControl control, boolean isTemplate, boolean addIds) throws SAXException {
 
         // NOTE: We used to not handle alerts and help in read-only mode. We now prefer to controls this with CSS.
         final boolean isHint = lhhaType == LHHAC.HINT;

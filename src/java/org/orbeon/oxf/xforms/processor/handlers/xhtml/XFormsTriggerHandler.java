@@ -13,9 +13,9 @@
  */
 package org.orbeon.oxf.xforms.processor.handlers.xhtml;
 
-import org.dom4j.QName;
 import org.orbeon.oxf.common.ValidationException;
 import org.orbeon.oxf.xforms.XFormsConstants;
+import org.orbeon.oxf.xforms.analysis.controls.TriggerAppearanceTrait;
 import org.orbeon.oxf.xforms.control.XFormsControl;
 import org.orbeon.oxf.xforms.control.XFormsSingleNodeControl;
 import org.orbeon.oxf.xml.ContentHandlerHelper;
@@ -27,8 +27,6 @@ import org.xml.sax.helpers.AttributesImpl;
  * Handle xforms:trigger and xforms:submit.
  */
 public abstract class XFormsTriggerHandler extends XFormsControlLifecyleHandler {
-
-    private boolean isModal;
 
     public XFormsTriggerHandler() {
         super(false);
@@ -65,29 +63,11 @@ public abstract class XFormsTriggerHandler extends XFormsControlLifecyleHandler 
     }
 
     @Override
-    public void init(String uri, String localname, String qName, Attributes attributes) throws SAXException {
-        super.init(uri, localname, qName, attributes);
-        
-        final String modalAttribute = attributes.getValue(XFormsConstants.XXFORMS_NAMESPACE_URI, "modal");
-        this.isModal = "true".equals(modalAttribute);
-    }
-
-    @Override
     protected void addCustomClasses(StringBuilder classes, XFormsControl control) {
         // Set modal class
         // TODO: xf:trigger/@xxforms:modal; do this in static state?
-        if (isModal)
+        if (((TriggerAppearanceTrait) elementAnalysis).isModal())
             classes.append(" xforms-trigger-appearance-modal");
-    }
-
-    @Override
-    protected QName getAppearance(Attributes controlAttributes) {
-        // Override appearance in noscript mode
-        final QName originalAppearance = super.getAppearance(controlAttributes);
-        if (handlerContext.isNoScript() && XFormsConstants.XFORMS_MINIMAL_APPEARANCE_QNAME.equals(originalAppearance))
-            return XFormsConstants.XXFORMS_MINIMAL_APPEARANCE_QNAME;
-        else
-            return originalAppearance;
     }
 
     @Override

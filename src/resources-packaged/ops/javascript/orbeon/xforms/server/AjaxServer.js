@@ -64,7 +64,6 @@
             if (formErrorPanel) {
                 // Render the dialog if needed
                 formErrorPanel.element.style.display = "block";
-                formErrorPanel.errorTitleDiv.innerHTML = title;
                 formErrorPanel.errorDetailsDiv.innerHTML = details;
                 formErrorPanel.show();
                 ORBEON.xforms.Globals.lastDialogZIndex += 2;
@@ -683,6 +682,8 @@
 
             } else {
                 // Consider this a failure
+                // As if the server returned an error code (5xx), in particular used by the loading indicator
+                YAHOO.util.Connect.failureEvent.fire();
                 AjaxServer.handleFailureAjax(o);
             }
         }
@@ -1160,11 +1161,11 @@
                                             parentElement.replaceChild(newDocumentElement, documentElement);
 
                                             // Remove alert
-                                            var alertElement = ORBEON.xforms.Controls._getControlLHHA(newDocumentElement, "alert");
+                                            var alertElement = ORBEON.xforms.Controls.getControlLHHA(newDocumentElement, "alert");
                                             if (alertElement != null)
                                                 parentElement.removeChild(alertElement);
                                             // Remove hint
-                                            var hintElement = ORBEON.xforms.Controls._getControlLHHA(newDocumentElement, "hint");
+                                            var hintElement = ORBEON.xforms.Controls.getControlLHHA(newDocumentElement, "hint");
                                             if (hintElement != null)
                                                 parentElement.removeChild(hintElement);
                                                 // Update document element information
@@ -1280,7 +1281,7 @@
                                                 return newInputElement;
                                             }
 
-                                            var inputLabelElement = ORBEON.xforms.Controls._getControlLHHA(documentElement, "label");
+                                            var inputLabelElement = ORBEON.xforms.Controls.getControlLHHA(documentElement, "label");
                                             if (newType.type == "string") {
                                                 var newStringInput = createInput("xforms-type-string", 1);
                                                 insertIntoDocument([newStringInput]);
@@ -1916,6 +1917,34 @@
                             }
                         }
                     }
+
+                } else if (ORBEON.util.Utils.getLocalName(responseRoot.childNodes[i]) == "errors") {
+
+                    // <xxf:errors>
+                    var errorsElement = responseRoot.childNodes[i];
+                    var details = "<ul>";
+                    for (var errorIndex = 0; errorIndex < errorsElement.childNodes.length; errorIndex++) {
+
+                        // <xxf:error exception="org.orbeon.saxon.trans.XPathException" file="gaga.xhtml" line="24" col="12">
+                        //     Invalid date "foo" (Year is less than four digits)
+                        // </xxf:error>
+                        var errorElement = errorsElement.childNodes[errorIndex];
+                        var exception = ORBEON.util.Dom.getAttribute(errorElement, "exception");
+                        var file = ORBEON.util.Dom.getAttribute(errorElement, "file");
+                        var line = ORBEON.util.Dom.getAttribute(errorElement, "line");
+                        var col = ORBEON.util.Dom.getAttribute(errorElement, "col");
+                        var message = ORBEON.util.Dom.getStringValue(errorElement);
+
+                        // Create HTML with message
+                        details += "<li>" + message;
+                        if (file) details += " in " + ORBEON.util.String.escapeHTMLMinimal(file);
+                        if (line) details += " line " + ORBEON.util.String.escapeHTMLMinimal(line);
+                        if (col) details += " column " + ORBEON.util.String.escapeHTMLMinimal(col);
+                        if (exception) details += " (" + ORBEON.util.String.escapeHTMLMinimal(exception) + ")";
+                        details += "</li>";
+                    }
+                    details += "</ul>";
+                    AjaxServer.showError("Non-fatal error", details, formID);
                 }
             }
 
@@ -1925,14 +1954,13 @@
                 ORBEON.xforms.Page.getForm(formID).getLoadingIndicator().show();
                 ORBEON.xforms.Globals.loadingOtherPage = true;
             }
-
-            // We can safely set this to false here, as if there is a request executed right after this, requestInProgress is set again to true by executeNextRequest().
-            ORBEON.xforms.Globals.requestInProgress = false;
         } catch (e) {
             // Show dialog with error to the user, as they won't be able to continue using the UI anyway
             AjaxServer.exceptionWhenTalkingToServer(e, formID);
-            // Rethrow, so the exception isn't lost (can be shown by Firebug, or a with little icon on the bottom left of the IE window)
-            throw e;
+            // Don't rethrow exception: we want to code that runs after the Ajax response is handled to run, so we have a chance to recover from this error
+        } finally {
+            // We can safely set this to false here, as if there is a request executed right after this, requestInProgress is set again to true by executeNextRequest().
+            ORBEON.xforms.Globals.requestInProgress = false;
         }
     };
 

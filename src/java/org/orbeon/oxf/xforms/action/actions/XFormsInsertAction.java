@@ -22,6 +22,7 @@ import org.orbeon.oxf.xforms.action.XFormsActionInterpreter;
 import org.orbeon.oxf.xforms.event.XFormsEvent;
 import org.orbeon.oxf.xforms.event.XFormsEventObserver;
 import org.orbeon.oxf.xforms.event.events.XFormsInsertEvent;
+import org.orbeon.oxf.xforms.model.DataModel;
 import org.orbeon.oxf.xforms.xbl.XBLBindingsBase;
 import org.orbeon.oxf.xml.dom4j.Dom4jUtils;
 import org.orbeon.saxon.dom4j.DocumentWrapper;
@@ -89,7 +90,7 @@ public class XFormsInsertAction extends XFormsAction {
         // "The insert action is terminated with no effect if [...] b. The context attribute is given, the insert
         // context does not evaluate to an element node and the Node Set Binding node-set is the empty node-set."
         // NOTE: In addition we support inserting into a context which is a document node
-        if (contextAttribute != null && isEmptyNodesetBinding && !XFormsUtils.isElement(insertContextItem) && !XFormsUtils.isDocument(insertContextItem)) {
+        if (contextAttribute != null && isEmptyNodesetBinding && !DataModel.isElement(insertContextItem) && !DataModel.isDocument(insertContextItem)) {
             if (indentedLogger.isDebugEnabled())
                 indentedLogger.logDebug("xforms:insert", "insert context is not an element node and binding node-set is empty, terminating");
             return;
@@ -199,7 +200,7 @@ public class XFormsInsertAction extends XFormsAction {
 
                 // "Otherwise, if the origin attribute is not given, then the origin node-set consists of the last
                 // node of the Node Set Binding node-set."
-                final Node singleSourceNode = XFormsUtils.getNodeFromNodeInfoConvert((NodeInfo) collectionToBeUpdated.get(collectionToBeUpdated.size() - 1), CANNOT_INSERT_READONLY_MESSAGE);
+                final Node singleSourceNode = XFormsUtils.getNodeFromNodeInfoConvert((NodeInfo) collectionToBeUpdated.get(collectionToBeUpdated.size() - 1));
                 // TODO: check namespace handling might be incorrect. Should use copyElementCopyParentNamespaces() instead?
                 final Node singleClonedNode = Dom4jUtils.createCopy(singleSourceNode);
 
@@ -227,7 +228,7 @@ public class XFormsInsertAction extends XFormsAction {
                         // This is the regular case covered by XForms 1.1 / XPath 1.0
 
                         // NOTE: Don't clone nodes if doClone == false
-                        final Node sourceNode = XFormsUtils.getNodeFromNodeInfoConvert((NodeInfo) currentObject, CANNOT_INSERT_READONLY_MESSAGE);
+                        final Node sourceNode = XFormsUtils.getNodeFromNodeInfoConvert((NodeInfo) currentObject);
                         final Node clonedNode = doClone ? (sourceNode instanceof Element) ? ((Element) sourceNode).createCopy() : (Node) sourceNode.clone() : sourceNode;
 
                         sourceNodes.add(sourceNode);

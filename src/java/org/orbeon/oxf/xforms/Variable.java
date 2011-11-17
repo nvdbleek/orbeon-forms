@@ -74,7 +74,7 @@ public class Variable {
         this.selectAttribute = VariableAnalysis.valueOrSelectAttribute(valueElement);
     }
 
-    private void evaluate(String sourceEffectiveId, boolean pushOuterContext) {
+    private void evaluate(String sourceEffectiveId, boolean pushOuterContext, boolean handleNonFatal) {
         if (selectAttribute == null) {
             // Inline constructor (for now, only textual content, but in the future, we could allow xforms:output in it? more?)
             variableValue = new StringValue(valueElement.getStringValue());
@@ -95,11 +95,23 @@ public class Variable {
                     // TODO: in the future, we should allow null context for expressions that do not depend on the context
 
                     final XFormsFunction.Context functionContext = contextStack.getFunctionContext(sourceEffectiveId);
-                    variableValue = XPathCache.evaluateAsExtent(
-                            currentNodeset, bindingContext.getPosition(),
-                            selectAttribute, container.getNamespaceMappings(valueElement), bindingContext.getInScopeVariables(),
-                            XFormsContainingDocument.getFunctionLibrary(), functionContext, null, getLocationData());
-                    contextStack.returnFunctionContext();
+                    try {
+                        variableValue = XPathCache.evaluateAsExtent(
+                                currentNodeset, bindingContext.getPosition(),
+                                selectAttribute, container.getNamespaceMappings(valueElement), bindingContext.getInScopeVariables(),
+                                XFormsContainingDocument.getFunctionLibrary(), functionContext, null, getLocationData());
+                    } catch (Exception e) {
+                        if (handleNonFatal) {
+                            // Don't consider this as fatal
+                            // Default value is the empty sequence
+                            XFormsError.handleNonFatalXPathError(container.getContainingDocument(), e);
+                            variableValue = EmptySequence.getInstance();
+                        } else {
+                            throw new OXFException(e);
+                        }
+                    } finally {
+                        contextStack.returnFunctionContext();
+                    }
                 } else {
                     variableValue = EmptySequence.getInstance();
                 }
@@ -114,11 +126,11 @@ public class Variable {
         return variableName;
     }
 
-    public ValueRepresentation getVariableValue(String sourceEffectiveId, boolean pushOuterContext) {
+    public ValueRepresentation getVariableValue(String sourceEffectiveId, boolean pushOuterContext, boolean handleNonFatal) {
         // Make sure the variable is evaluated
         if (!evaluated) {
             evaluated = true;
-            evaluate(sourceEffectiveId, pushOuterContext);
+            evaluate(sourceEffectiveId, pushOuterContext, handleNonFatal);
         }
 
         // Return value and rewrap if necessary

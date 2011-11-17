@@ -552,7 +552,33 @@ public class XFormsModel implements XFormsEventTarget, XFormsEventObserver, XFor
                 throw (RuntimeException) throwable;
             else
                 throw new ValidationException("Received fatal error event: " + eventName, throwable, getLocationData());
+        } else if (XFormsEvents.XXFORMS_XPATH_ERROR.equals(eventName)) {
+            // Custom event for XPath errors
+            // NOTE: We don't like this event very much as it is dispatched in the middle of rebuild/recalculate/revalidate,
+            // and event handlers for this have to be careful. It might be better to dispatch it *after* RRR.
+
+            final XXFormsXPathErrorEvent ev = (XXFormsXPathErrorEvent) event;
+            final Throwable t = ev.throwable();
+            if (isIgnorableXPathError(t))
+                XFormsError.logNonFatalXPathErrorAsDebug(containingDocument, t);
+            else
+                XFormsError.handleNonFatalXPathError(containingDocument, t);
+        } else if (XFormsEvents.XXFORMS_BINDING_ERROR.equals(eventName)) {
+            // Custom event for binding errors
+            // NOTE: We don't like this event very much as it is dispatched in the middle of rebuild/recalculate/revalidate,
+            // and event handlers for this have to be careful. It might be better to dispatch it *after* RRR.
+
+            final XXFormsBindingErrorEvent ev = (XXFormsBindingErrorEvent) event;
+            XFormsError.handleNonFatalSetvalueError(containingDocument, ev.locationData(), ev.reason());
         }
+    }
+
+    private boolean isIgnorableXPathError(Throwable t) {
+        if (XFormsProperties.isIgnoreDynamicMIPXPathErrors(containingDocument)) {
+            final Throwable root = OXFException.getRootThrowable(t);
+            return (root instanceof XPathException) && ! ((XPathException) root).isStaticError();
+        } else
+            return false;
     }
 
     private void doReset() {

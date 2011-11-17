@@ -191,7 +191,7 @@ public class XFormsServer extends ProcessorImpl {
                             // Handle uploaded files for noscript if any
                             if (hasFiles) {
                                 eventsIndentedLogger.logDebug("", "handling uploaded files");
-                                XFormsUploadControl.handleUploadedFiles(pipelineContext, containingDocument, filesElement, true);
+                                XFormsUploadControl.handleUploadedFiles(containingDocument, filesElement);
                             }
 
                             // Dispatch the events
@@ -590,6 +590,11 @@ public class XFormsServer extends ProcessorImpl {
 
                 ch.endElement();
             }
+
+            // Output errors
+            final List<XFormsError.ServerError> errors = containingDocument.getServerErrors();
+            if (errors.size() > 0)
+                XFormsError.outputAjaxErrors(ch, errors);
 
             ch.endElement();
             xmlReceiver.endPrefixMapping("xxf");

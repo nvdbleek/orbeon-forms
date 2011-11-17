@@ -19,8 +19,12 @@ import org.orbeon.oxf.xforms.control.XFormsControl;
 import org.orbeon.oxf.xforms.control.controls.XFormsInputControl;
 import org.orbeon.oxf.xforms.itemset.Item;
 import org.orbeon.oxf.xforms.itemset.Itemset;
-import org.orbeon.oxf.xml.*;
-import org.xml.sax.*;
+import org.orbeon.oxf.xml.ContentHandlerHelper;
+import org.orbeon.oxf.xml.XMLConstants;
+import org.orbeon.oxf.xml.XMLUtils;
+import org.xml.sax.Attributes;
+import org.xml.sax.ContentHandler;
+import org.xml.sax.SAXException;
 import org.xml.sax.helpers.AttributesImpl;
 
 /**
@@ -30,51 +34,46 @@ import org.xml.sax.helpers.AttributesImpl;
  */
 public class XFormsInputHandler extends XFormsControlLifecyleHandler {
 
-    private String appearance;
-    private boolean isDateTime;
-    private boolean isDateMinimal;
-    private boolean isBoolean;
+    private XFormsInputControl.PlaceHolderInfo placeHolderInfo;
 
     public XFormsInputHandler() {
         super(false);
     }
 
     @Override
-    public void init(String uri, String localname, String qName, Attributes attributes) throws SAXException {
-        super.init(uri, localname, qName, attributes);
+    public void init(String uri, String localname, String qName, Attributes attributes, Object matched) throws SAXException {
+        super.init(uri, localname, qName, attributes, matched);
 
-        // Handle appearance
-        if (!handlerContext.isTemplate()) {
-            final XFormsInputControl control = (XFormsInputControl) getControl();
-            if (control != null) {
+        this.placeHolderInfo = XFormsInputControl.getPlaceholderInfo(handlerContext.getPartAnalysis(), elementAnalysis, getControl());
+    }
+    
+    private boolean isDateTime() {
+        final XFormsInputControl control = getControl();
+        return control != null && "dateTime".equals(control.getBuiltinTypeName());
+    }
 
-                appearance = control.getAppearance();
+    private boolean isDateMinimal() {
+        final XFormsInputControl control = getControl();
+        return control != null && "date".equals(control.getBuiltinTypeName()) && control.getAppearances().contains(XFormsConstants.XFORMS_MINIMAL_APPEARANCE_QNAME);
+    }
 
-                final String controlTypeName = control.getBuiltinTypeName();
-                isDateTime = "dateTime".equals(controlTypeName);
-                isDateMinimal = "date".equals(controlTypeName) && "minimal".equals(appearance) ;
-                isBoolean = "boolean".equals(controlTypeName);
-            } else {
-                appearance = null;
-                isDateTime = false;
-                isDateMinimal = false;
-                isBoolean = false;
-            }
-        } else {
-            appearance = null;
-            isDateTime = false;
-            isDateMinimal = false;
-            isBoolean = false;
-        }
+    private boolean isBoolean() {
+        final XFormsInputControl control = getControl();
+        return control != null && "boolean".equals(control.getBuiltinTypeName());
+    }
+
+    @Override
+    protected XFormsInputControl getControl() {
+        return (XFormsInputControl) super.getControl();
     }
 
     protected void handleControlStart(String uri, String localname, String qName, Attributes attributes, String staticId, String effectiveId, XFormsControl control) throws SAXException {
 
         final XFormsInputControl inputControl = (XFormsInputControl) control;
         final ContentHandler contentHandler = handlerContext.getController().getOutput();
-        final boolean isConcreteControl = inputControl != null;
+        final boolean isConcreteControl = inputControl != null && inputControl.isRelevant();
 
-        if (isBoolean) {
+        if (isBoolean()) {
             // Produce a boolean output
 
             if (!isStaticReadonly(inputControl)) {
@@ -106,7 +105,7 @@ public class XFormsInputHandler extends XFormsControlLifecyleHandler {
                     }
                 };
                 select1Handler.setContext(getContext());
-                select1Handler.init(uri, localname, qName, attributes);
+                select1Handler.init(uri, localname, qName, attributes, elementAnalysis);
                 select1Handler.outputContent(uri, localname, attributes, effectiveId, inputControl, itemset, isMultiple, true, true);
             } else {
                 // Output static read-only value
@@ -130,7 +129,6 @@ public class XFormsInputHandler extends XFormsControlLifecyleHandler {
         } else {
 
             // Create xhtml:span
-//            final boolean isReadOnly = isConcreteControl && inputControl.isReadonly();
             final String xhtmlPrefix = handlerContext.findXHTMLPrefix();
             final String enclosingElementLocalname = "span";
             final String enclosingElementQName = XMLUtils.buildQName(xhtmlPrefix, enclosingElementLocalname);
@@ -153,7 +151,7 @@ public class XFormsInputHandler extends XFormsControlLifecyleHandler {
 
                             reusableAttributes.clear();
                             reusableAttributes.addAttribute("", "id", "id", ContentHandlerHelper.CDATA, inputIdName);
-                            if (!isDateMinimal)
+                            if (!isDateMinimal())
                                 reusableAttributes.addAttribute("", "type", "type", ContentHandlerHelper.CDATA, "text");
                             // Use effective id for name of first field
                             reusableAttributes.addAttribute("", "name", "name", ContentHandlerHelper.CDATA, inputIdName);
@@ -161,7 +159,7 @@ public class XFormsInputHandler extends XFormsControlLifecyleHandler {
                             if (isConcreteControl) {
                                 // Output value only for concrete control
                                 final String formattedValue = inputControl.getFirstValueUseFormat();
-                                if (!isDateMinimal) {
+                                if (!isDateMinimal()) {
                                     // Regular case, value goes to input control
                                     reusableAttributes.addAttribute("", "value", "value", ContentHandlerHelper.CDATA, formattedValue != null ? formattedValue : "");
                                 } else {
@@ -174,23 +172,26 @@ public class XFormsInputHandler extends XFormsControlLifecyleHandler {
                                     inputClasses.append(" xforms-type-");
                                     inputClasses.append(firstType);
                                 }
-                                if (appearance != null) {
-                                    inputClasses.append(" xforms-input-appearance-");
-                                    inputClasses.append(appearance);
-                                }
+
+                                // Q: Not sure why we duplicate the appearances here. As of 2011-10-27, removing this
+                                // makes the minimal date picker fail on the client. We should be able to remove this.
+                                appendAppearances(elementAnalysis, inputClasses);
 
                                 // Output xxforms:* extension attributes
                                 inputControl.addExtensionAttributes(reusableAttributes, XFormsConstants.XXFORMS_NAMESPACE_URI);
-
                             } else {
                                 reusableAttributes.addAttribute("", "value", "value", ContentHandlerHelper.CDATA, "");
                             }
+
+                            // Add attribute even if the control is not concrete
+                            if (placeHolderInfo != null && placeHolderInfo.placeholder != null)
+                                reusableAttributes.addAttribute("", "placeholder", "placeholder", ContentHandlerHelper.CDATA, placeHolderInfo.placeholder);
 
                             reusableAttributes.addAttribute("", "class", "class", ContentHandlerHelper.CDATA, inputClasses.toString());
 
                             // Handle accessibility attributes
                             handleAccessibilityAttributes(attributes, reusableAttributes);
-                            if (isDateMinimal) {
+                            if (isDateMinimal()) {
                                 final String imgQName = XMLUtils.buildQName(xhtmlPrefix, "img");
                                 reusableAttributes.addAttribute("", "src", "src", ContentHandlerHelper.CDATA, XFormsConstants.CALENDAR_IMAGE_URI);
                                 reusableAttributes.addAttribute("", "title", "title", ContentHandlerHelper.CDATA, "");
@@ -207,7 +208,7 @@ public class XFormsInputHandler extends XFormsControlLifecyleHandler {
 
                         // Add second field for dateTime's time part
                         // NOTE: In the future, we probably want to do this as an XBL component
-                        if (isDateTime) {
+                        if (isDateTime()) {
 
                             final String inputIdName = getSecondInputEffectiveId(effectiveId);
 
@@ -272,7 +273,7 @@ public class XFormsInputHandler extends XFormsControlLifecyleHandler {
     }
 
     private String getFirstInputEffectiveId(String effectiveId) {
-        if (!isBoolean) {
+        if (!isBoolean()) {
             // Do as if this was in a component, noscript has to handle that
             return XFormsUtils.namespaceId(containingDocument, XFormsUtils.appendToEffectiveId(effectiveId, "$xforms-input-1"));
         } else {
@@ -281,7 +282,7 @@ public class XFormsInputHandler extends XFormsControlLifecyleHandler {
     }
 
     private String getSecondInputEffectiveId(String effectiveId) {
-        if (isDateTime) {
+        if (isDateTime()) {
             // Do as if this was in a component, noscript has to handle that
             return XFormsUtils.namespaceId(containingDocument, XFormsUtils.appendToEffectiveId(effectiveId, "$xforms-input-2"));
         } else {
@@ -291,10 +292,22 @@ public class XFormsInputHandler extends XFormsControlLifecyleHandler {
 
     @Override
     public String getForEffectiveId() {
-        if (isBoolean) {
+        if (isBoolean()) {
             return XFormsSelect1Handler.getItemId(getEffectiveId(), "0");
         } else {
             return getFirstInputEffectiveId(getEffectiveId());
         }
+    }
+
+    @Override
+    protected void handleLabel() throws SAXException {
+        if (!(placeHolderInfo != null && placeHolderInfo.isLabelPlaceholder))
+            super.handleLabel();
+    }
+
+    @Override
+    protected void handleHint() throws SAXException {
+        if (!(placeHolderInfo != null && placeHolderInfo.isHintPlaceholder))
+            super.handleHint();
     }
 }

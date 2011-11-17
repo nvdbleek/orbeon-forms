@@ -24,6 +24,7 @@ import org.orbeon.oxf.xforms.control.XFormsValueControl;
 import org.orbeon.oxf.xforms.xbl.XBLContainer;
 import org.orbeon.oxf.xml.XMLUtils;
 import org.orbeon.oxf.xml.dom4j.Dom4jUtils;
+import scala.Tuple3;
 
 import java.util.Map;
 
@@ -31,8 +32,6 @@ import java.util.Map;
  * Represents an xforms:textarea control.
  */
 public class XFormsTextareaControl extends XFormsValueControl {
-
-    private static final String AUTOSIZE_APPEARANCE = Dom4jUtils.qNameToExplodedQName(XFormsConstants.XXFORMS_AUTOSIZE_APPEARANCE_QNAME);
 
     // List of attributes to handle as AVTs
     private static final QName[] EXTENSION_ATTRIBUTES = {
@@ -51,8 +50,10 @@ public class XFormsTextareaControl extends XFormsValueControl {
     }
 
     @Override
-    public boolean hasJavaScriptInitialization() {
-        return "text/html".equals(getMediatype()) || AUTOSIZE_APPEARANCE.equals(getAppearance());
+    public Tuple3<String, String, String> getJavaScriptInitialization() {
+        final boolean hasInitialization = "text/html".equals(getMediatype()) || getAppearances().contains(XFormsConstants.XXFORMS_AUTOSIZE_APPEARANCE_QNAME);
+
+        return hasInitialization ? getCommonJavaScriptInitialization() : null;
     }
 
     // NOTE: textarea doesn't support maxlength natively (this is added in HTML 5), but this can be implemented in JavaScript
@@ -65,7 +66,7 @@ public class XFormsTextareaControl extends XFormsValueControl {
      * a stylesheet that removes all unknown or dangerous content.
      */
     @Override
-    public void storeExternalValue(String value, String type) {
+    public void storeExternalValue(String value) {
         if ("text/html".equals(getMediatype())) {
             final IndentedLogger indentedLogger = containingDocument.getControls().getIndentedLogger();
             final boolean isDebugEnabled = indentedLogger.isDebugEnabled();
@@ -89,6 +90,6 @@ public class XFormsTextareaControl extends XFormsValueControl {
             if (isDebugEnabled)
                 indentedLogger.endHandleOperation("value", value);
         }
-        super.storeExternalValue(value, type);
+        super.storeExternalValue(value);
     }
 }

@@ -33,22 +33,19 @@ import org.orbeon.oxf.xforms.itemset.Itemset;
 import org.orbeon.oxf.xforms.itemset.XFormsItemUtils;
 import org.orbeon.oxf.xforms.xbl.XBLContainer;
 import org.orbeon.oxf.xml.ContentHandlerHelper;
-import org.orbeon.oxf.xml.dom4j.Dom4jUtils;
 import org.orbeon.oxf.xml.dom4j.ExtendedLocationData;
 import org.xml.sax.helpers.AttributesImpl;
+import scala.Tuple3;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Represents an xforms:select1 control.
  */
 public class XFormsSelect1Control extends XFormsValueControl {
-
-    public static final String FULL_APPEARANCE = Dom4jUtils.qNameToExplodedQName(XFormsConstants.XFORMS_FULL_APPEARANCE_QNAME);
-    public static final String TREE_APPEARANCE = Dom4jUtils.qNameToExplodedQName(XFormsConstants.XXFORMS_TREE_APPEARANCE_QNAME);
-    public static final String MENU_APPEARANCE = Dom4jUtils.qNameToExplodedQName(XFormsConstants.XXFORMS_MENU_APPEARANCE_QNAME);
 
     // List of attributes to handle as AVTs for select1 with appearance="full"
     private static final QName[] EXTENSION_ATTRIBUTES_SELECT1_APPEARANCE_FULL = {
@@ -109,10 +106,13 @@ public class XFormsSelect1Control extends XFormsValueControl {
     }
 
     @Override
-    public boolean hasJavaScriptInitialization() {
-        final String appearance = getAppearance();
-        return appearance != null
-                && (TREE_APPEARANCE.equals(appearance) || MENU_APPEARANCE.equals(appearance) || "compact".equals(appearance));
+    public Tuple3<String, String, String> getJavaScriptInitialization() {
+        final Set<QName> appearances = getAppearances();
+        final boolean hasInitialization =
+            appearances.contains(XFormsConstants.XXFORMS_TREE_APPEARANCE_QNAME)
+                || appearances.contains(XFormsConstants.XXFORMS_MENU_APPEARANCE_QNAME)
+                || appearances.contains(XFormsConstants.XFORMS_COMPACT_APPEARANCE_QNAME);
+        return hasInitialization ? getCommonJavaScriptInitialization() : null;
     }
 
     @Override
@@ -129,7 +129,7 @@ public class XFormsSelect1Control extends XFormsValueControl {
      * @return true iif appearance is "full"
      */
     public boolean isFullAppearance() {
-        return FULL_APPEARANCE.equals(getAppearance());
+        return getAppearances().contains(XFormsConstants.XFORMS_FULL_APPEARANCE_QNAME);
     }
 
     /**
@@ -198,10 +198,6 @@ public class XFormsSelect1Control extends XFormsValueControl {
         return analysis.hasStaticItemset();
     }
 
-    public boolean isOpenSelection() {
-        return getSelectionControl().isOpenSelection();
-    }
-
     public boolean isEncryptItemValues() {
         return getSelectionControl().isEncryptValues();
     }
@@ -233,7 +229,7 @@ public class XFormsSelect1Control extends XFormsValueControl {
     }
 
     @Override
-    public void storeExternalValue(String value, String type) {
+    public void storeExternalValue(String value) {
 
         if (!(this instanceof XFormsSelectControl)) {// kind of a HACK due to the way our class hierarchy is setup
             // Handle xforms:select1-specific logic
@@ -292,14 +288,14 @@ public class XFormsSelect1Control extends XFormsValueControl {
                 }
             }
 
-            if (hasSelectedItem || isOpenSelection()) {
+            if (hasSelectedItem) {
                 // Only then do we store the external value. This ensures that if the value is NOT in the itemset AND
                 // we are a closed selection then we do NOT store the value in instance.
-                super.storeExternalValue(value, type);
+                super.storeExternalValue(value);
             }
         } else {
             // Forward to superclass
-            super.storeExternalValue(value, type);
+            super.storeExternalValue(value);
         }
     }
 
@@ -384,12 +380,12 @@ public class XFormsSelect1Control extends XFormsValueControl {
     @Override
     public boolean setFocus() {
         // Don't accept focus if we have the internal appearance
-        return !XFormsGroupControl.INTERNAL_APPEARANCE.equals(getAppearance()) && super.setFocus();
+        return !getAppearances().contains(XFormsConstants.XXFORMS_INTERNAL_APPEARANCE_QNAME) && super.setFocus();
     }
 
     @Override
     public boolean supportAjaxUpdates() {
-        return !XFormsGroupControl.INTERNAL_APPEARANCE.equals(getAppearance());
+        return !getAppearances().contains(XFormsConstants.XXFORMS_INTERNAL_APPEARANCE_QNAME);
     }
 
     // Work in progress for in-bounds/out-of-bounds

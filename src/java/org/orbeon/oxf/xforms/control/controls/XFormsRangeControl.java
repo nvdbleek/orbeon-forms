@@ -19,6 +19,7 @@ import org.orbeon.oxf.xforms.control.XFormsControl;
 import org.orbeon.oxf.xforms.control.XFormsValueControl;
 import org.orbeon.oxf.xforms.xbl.XBLContainer;
 import org.orbeon.oxf.xml.XMLConstants;
+import scala.Tuple3;
 
 import java.util.Map;
 
@@ -39,8 +40,8 @@ public class XFormsRangeControl extends XFormsValueControl {
     }
 
     @Override
-    public boolean hasJavaScriptInitialization() {
-        return true;
+    public Tuple3<String, String, String> getJavaScriptInitialization() {
+        return getCommonJavaScriptInitialization();
     }
 
     public String getStart() {
@@ -56,9 +57,9 @@ public class XFormsRangeControl extends XFormsValueControl {
     }
 
     @Override
-    public void storeExternalValue(String value, String type) {
+    public void storeExternalValue(String value) {
         // Store after converting
-        super.storeExternalValue(convertFromExternalValue(value), type);
+        super.storeExternalValue(convertFromExternalValue(value));
     }
 
     private String convertFromExternalValue(String externalValue) {

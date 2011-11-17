@@ -25,7 +25,8 @@ import org.orbeon.oxf.xforms.action.XFormsAction;
 import org.orbeon.oxf.xforms.action.XFormsActionInterpreter;
 import org.orbeon.oxf.xforms.event.XFormsEvent;
 import org.orbeon.oxf.xforms.event.XFormsEventObserver;
-import org.orbeon.oxf.xforms.xbl.XBLBindings;
+import org.orbeon.oxf.xforms.model.DataModel;
+import org.orbeon.oxf.xforms.xbl.XBLBindingsBase;
 import org.orbeon.oxf.xml.XMLConstants;
 import org.orbeon.saxon.om.Item;
 
@@ -35,7 +36,7 @@ import org.orbeon.saxon.om.Item;
 public class XFormsLoadAction extends XFormsAction {
     public void execute(XFormsActionInterpreter actionInterpreter, XFormsEvent event,
                         XFormsEventObserver eventObserver, Element actionElement,
-                        XBLBindings.Scope actionScope, boolean hasOverriddenContext, Item overriddenContext) {
+                        XBLBindingsBase.Scope actionScope, boolean hasOverriddenContext, Item overriddenContext) {
 
         final XFormsContainingDocument containingDocument = actionInterpreter.getContainingDocument();
 
@@ -61,7 +62,7 @@ public class XFormsLoadAction extends XFormsAction {
 
         if (bindingContext.isNewBind()) {
             // Use single-node binding
-            final String tempValue = XFormsUtils.getBoundItemValue(bindingContext.getSingleItem());
+            final String tempValue = DataModel.getValue(bindingContext.getSingleItem());
             if (tempValue != null) {
                 final String encodedValue = NetUtils.encodeHRRI(tempValue, true);
                 resolveStoreLoadValue(containingDocument, actionElement, doReplace, encodedValue, target, urlType, urlNorewrite, isShowProgress);

@@ -37,10 +37,10 @@ object XML {
 
     // Convenience methods for the XPath API
     def evalOne(item: Item, expr: String, namespaces: NamespaceMapping = XFormsStaticStateImpl.BASIC_NAMESPACE_MAPPING, variables: Map[String, ValueRepresentation] = null) =
-        XPathCache.evaluaSingleteKeepItems(Collections.singletonList(item), 1, expr, namespaces, if (variables == null) null else variables.asJava, null, null, null, null)
+        XPathCache.evaluaSingleteKeepItems(Collections.singletonList(item), 1, expr, namespaces, if (variables eq null) null else variables.asJava, null, null, null, null)
 
     def eval(item: Item, expr: String, namespaces: NamespaceMapping = XFormsStaticStateImpl.BASIC_NAMESPACE_MAPPING, variables: Map[String, ValueRepresentation] = null) =
-        XPathCache.evaluate(item, expr, namespaces, if (variables == null) null else variables.asJava, null, null, null, null)
+        XPathCache.evaluate(item, expr, namespaces, if (variables eq null) null else variables.asJava, null, null, null, null)
 
     // Runtime conversion to NodeInfo (can fail!)
     def asNodeInfo(item: Item) = item.asInstanceOf[NodeInfo]
@@ -76,7 +76,7 @@ object XML {
     // Like XPath namespace-uri()
     def namespaceURI(nodeInfo: NodeInfo) = {
         val uri = nodeInfo.getURI
-        if (uri == null) "" else uri
+        if (uri eq null) "" else uri
     }
 
     private def parseQName(lexicalQName: String) = {
@@ -190,6 +190,7 @@ object XML {
         def \\@(test: Test): Seq[NodeInfo] = find(Axis.DESCENDANT, test)
 
         def root = nodeInfo.getDocumentRoot
+        def rootElement = root \ * head
 
         def att(attName: String) = \@(attName)
         def att(test: Test) = \@(test)
@@ -197,6 +198,8 @@ object XML {
         def descendant(test: Test) = \\(test)
 
         def attValue(attName: String) = \@(attName).stringValue
+        def attTokens(attName: String) = attValue(attName) split """\s+""" toSet
+        def attClasses = attTokens("class")
 
         def self(test: Test) = find(Axis.SELF, test)
         def parent = Option(nodeInfo.getParent)
@@ -272,7 +275,7 @@ object XML {
 
     implicit def itemSeqToFirstItem(items: Seq[Item]): Item = items.headOption.orNull // TODO: don't return null
 
-    implicit def nodeInfoToDom4jElement(nodeInfo: NodeInfo): Element =
+    implicit def unwrapElement(nodeInfo: NodeInfo): Element =
         nodeInfo.asInstanceOf[NodeWrapper].getUnderlyingNode.asInstanceOf[Element]
 
     def elemToDom4j(e: Elem): Document = Dom4jUtils.readDom4j(e.toString)

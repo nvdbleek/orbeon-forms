@@ -21,19 +21,21 @@ import org.orbeon.oxf.externalcontext.URLRewriter;
 import org.orbeon.oxf.pipeline.api.ExternalContext;
 import org.orbeon.oxf.util.NetUtils;
 import org.orbeon.oxf.xforms.XFormsConstants;
+import org.orbeon.oxf.xforms.XFormsError;
 import org.orbeon.oxf.xforms.XFormsProperties;
 import org.orbeon.oxf.xforms.XFormsUtils;
 import org.orbeon.oxf.xforms.analysis.XPathDependencies;
 import org.orbeon.oxf.xforms.control.XFormsControl;
 import org.orbeon.oxf.xforms.control.XFormsValueControl;
 import org.orbeon.oxf.xforms.event.XFormsEvents;
+import org.orbeon.oxf.xforms.model.DataModel;
 import org.orbeon.oxf.xforms.processor.XFormsResourceServer;
 import org.orbeon.oxf.xforms.submission.Headers;
 import org.orbeon.oxf.xforms.xbl.XBLContainer;
-import org.orbeon.oxf.xml.dom4j.Dom4jUtils;
 import org.xml.sax.helpers.AttributesImpl;
 
 import java.net.URI;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -47,8 +49,6 @@ public class XFormsOutputControl extends XFormsValueControl {
     private static final QName[] DOWNLOAD_APPEARANCE_EXTENSION_ATTRIBUTES = {
             XFormsConstants.XXFORMS_TARGET_QNAME
     };
-
-    private static final String DOWNLOAD_APPEARANCE = Dom4jUtils.qNameToExplodedQName(XFormsConstants.XXFORMS_DOWNLOAD_APPEARANCE_QNAME);
 
     // Optional display format
     private final String format;
@@ -78,7 +78,7 @@ public class XFormsOutputControl extends XFormsValueControl {
 
     @Override
     protected QName[] getExtensionAttributes() {
-        if (DOWNLOAD_APPEARANCE.equals(getAppearance()))
+        if (getAppearances().contains(XFormsConstants.XXFORMS_DOWNLOAD_APPEARANCE_QNAME))
             return DOWNLOAD_APPEARANCE_EXTENSION_ATTRIBUTES;
         else
             return null;
@@ -105,7 +105,7 @@ public class XFormsOutputControl extends XFormsValueControl {
         final String value;
         if (valueAttribute == null) {
             // Get value from single-node binding
-            final String tempValue = XFormsUtils.getBoundItemValue(bindingContext.getSingleItem());
+            final String tempValue = DataModel.getValue(bindingContext.getSingleItem());
             value = (tempValue != null) ? tempValue : "";
         } else {
             // Value comes from the XPath expression within the value attribute
@@ -123,7 +123,7 @@ public class XFormsOutputControl extends XFormsValueControl {
         assert internalValue != null;
 
         final String updatedValue;
-        if (DOWNLOAD_APPEARANCE.equals(getAppearance())) {
+        if (getAppearances().contains(XFormsConstants.XXFORMS_DOWNLOAD_APPEARANCE_QNAME)) {
             // Download appearance
             final String dynamicMediatype = fileInfo.getFileMediatype();
             // NOTE: Never put timestamp for downloads otherwise browsers may cache the file to download which is not
@@ -157,8 +157,13 @@ public class XFormsOutputControl extends XFormsValueControl {
 
     private Map<String, String[]> evaluateHeaders() {
         getContextStack().setBinding(this); // evaluateHeaders() requires this (bad, but do this until we can pass BindingContext directly)
-        return Headers.evaluateHeaders(getXBLContainer(), getContextStack(),
+        try {
+            return Headers.evaluateHeaders(getXBLContainer(), getContextStack(),
                 getEffectiveId(), getElementAnalysis().element());
+        } catch (Exception e) {
+            XFormsError.handleNonFatalXPathError(containingDocument, e);
+            return Collections.emptyMap();
+        }
     }
 
     private String proxyValueIfNeeded(String internalValue, String defaultValue, String mediatype) {
@@ -200,7 +205,7 @@ public class XFormsOutputControl extends XFormsValueControl {
 
     @Override
     public String getEscapedExternalValue() {
-        if (DOWNLOAD_APPEARANCE.equals(getAppearance()) || mediatypeAttribute != null && mediatypeAttribute.startsWith("image/")) {
+        if (getAppearances().contains(XFormsConstants.XXFORMS_DOWNLOAD_APPEARANCE_QNAME) || mediatypeAttribute != null && mediatypeAttribute.startsWith("image/")) {
             final String externalValue = getExternalValue();
             if (StringUtils.isNotBlank(externalValue)) {
                 // External value is not blank, rewrite as absolute path. Two cases:
